@@ -1,6 +1,13 @@
 # Dataset-specific configurations
 # This file handles data loading, preprocessing, and partitioning
 
+# Global settings
+seed: 42
+log_level: "INFO"
+output_dir: "data/processed"
+force_reprocess: true
+datasets_to_process: null  # null means process all datasets
+
 # Global data settings
 data_split:
   train_subset_size: 10000
