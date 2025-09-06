@@ -1,0 +1,72 @@
+# Model-specific configurations
+# This file handles model architectures, parameters, and training settings
+
+# Global hyperparameters
+hyperparameters:
+  learning_rate: 1e-3
+  batch_size: 32
+  num_epochs: 50
+  weight_decay: 0.0
+  dropout: 0.0
+
+# Transformer models
+transformer_models:
+  bert-base-uncased:
+    type: "transformer"
+    model_name: "bert-base-uncased"
+    tokenizer_name: "bert-base-uncased"
+    num_labels: 2
+    
+  roberta-base:
+    type: "transformer"
+    model_name: "roberta-base"
+    tokenizer_name: "roberta-base"
+    num_labels: 2
+    
+  distilbert-base-uncased:
+    type: "transformer"
+    model_name: "distilbert-base-uncased"
+    tokenizer_name: "distilbert-base-uncased"
+    num_labels: 2
+
+# Baseline models
+baseline_models:
+  bag-of-words-tfidf:
+    type: "baseline"
+    vectorizer: "tfidf"
+    classifier: "logistic_regression"
+    num_labels: 2
+    
+    max_features: 10000
+    ngram_range: [1, 2]
+    min_df: 2
+    max_df: 0.95
+    stop_words: "english"
+    lowercase: true
+    strip_accents: "unicode"
+    
+    C: 1.0
+    penalty: "l2"
+    solver: "liblinear"
+    max_iter: 1000
+
+model_selection:
+  selected_models:
+    - "bert-base-uncased"
+    - "roberta-base"
+    - "distilbert-base-uncased"
+    - "bag-of-words-tfidf"
+  
+  categories:
+    transformer:
+      - "bert-base-uncased"
+      - "roberta-base"
+      - "distilbert-base-uncased"
+    baseline:
+      - "bag-of-words-tfidf"
+
+# Memory optimization for M4 Pro
+memory:
+  gradient_checkpointing: true
+  mixed_precision: false
+  max_memory_usage: 0.8
