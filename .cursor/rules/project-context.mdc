@@ -1,0 +1,451 @@
+---
+alwaysApply: false
+---
+# NLP Interpretability Project - Cursor Rules
+
+## Project Overview
+This project investigates the relationship between model overfitting and interpretability quality in NLP sentiment classification tasks. We demonstrate that high-accuracy overfitted models produce unreliable SHAP interpretations.
+
+## Core Hypotheses
+- Overfitted models with high accuracy produce poor interpretability metrics
+- SHAP values become non-intuitive when models memorize rather than generalize
+- Cross-dataset validation reveals interpretation instability in overfitted models
+
+## Technical Constraints
+- **Hardware**: MacBook Pro M4 Pro (Apple Silicon)
+- **No CUDA**: Use MPS (Metal Performance Shaders) or CPU-only implementations
+- **Memory Management**: Implement gradient checkpointing and batch size optimization for large models
+
+## Project Structure
+```
+nlp_interpretability/
+├── README.md
+├── requirements.txt
+├── setup.py
+├── configs/
+│   ├── model_configs.yaml
+│   ├── dataset_configs.yaml
+│   └── experiment_configs.yaml
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   └── cache/
+├── src/
+│   ├── __init__.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── base_model.py
+│   │   ├── transformer_models.py
+│   │   ├── baseline_models.py
+│   │   └── model_factory.py
+│   ├── datasets/
+│   │   ├── __init__.py
+│   │   ├── base_dataset.py
+│   │   ├── sentiment_datasets.py
+│   │   └── data_preprocessor.py
+│   ├── training/
+│   │   ├── __init__.py
+│   │   ├── trainer.py
+│   │   ├── overfitting_strategy.py
+│   │   └── callbacks.py
+│   ├── interpretability/
+│   │   ├── __init__.py
+│   │   ├── shap_analyzer.py
+│   │   ├── metrics.py
+│   │   └── visualization.py
+│   ├── evaluation/
+│   │   ├── __init__.py
+│   │   ├── cross_validation.py
+│   │   ├── performance_metrics.py
+│   │   └── interpretability_metrics.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── device_utils.py
+│       ├── logging_utils.py
+│       └── reproducibility.py
+├── results/
+│   ├── models/
+│   ├── interpretability/
+│   ├── figures/
+│   └── tables/
+└── tests/
+    ├── test_models.py
+    ├── test_datasets.py
+    ├── test_interpretability.py
+    └── test_metrics.py
+```
+
+## Coding Standards
+
+### General Python Guidelines
+- Use Python 3.9+ with type hints for all function signatures
+- Follow PEP 8 style guide
+- Use descriptive variable names (no single letters except in loops)
+- All classes should inherit from ABC when appropriate
+- Document all functions with Google-style docstrings
+
+## Key Implementation Files
+
+### Core Scripts (Root Level)
+
+**train.py** - Main orchestrator
+- Loads configuration from config.yaml
+- Iterates through all model-dataset combinations
+- Implements overfitting strategy (high LR, no regularization, many epochs)
+- Saves model checkpoints to results/models/
+- Calls SHAP computation after training
+- Logs all metrics to results/metrics/
+
+**preprocess.py** - Data pipeline
+- Downloads datasets from HuggingFace
+- Creates small training subsets (10000 samples) for overfitting
+- Applies model-specific preprocessing (tokenization for transformers, TF-IDF for BoW)
+- Caches processed data to data/processed/
+- Handles all three datasets uniformly
+
+**validation.py** - Evaluation and analysis
+- Loads trained models from results/models/
+- Performs cross-dataset evaluation (train on IMDB, test on Yelp/Amazon, etc.)
+- Computes interpretability metrics (faithfulness, consistency, sparsity)
+- Generates publication figures and LaTeX tables
+- Performs statistical significance testing
+
+### Model Implementations (models/)
+
+**base.py** - Abstract interface
+- Defines common methods all models must implement
+- Ensures uniform API across different model types
+
+**transformers.py** - Neural models
+- BERTModel, RoBERTaModel, LlamaModel classes
+- Handles HuggingFace model loading
+- Implements forward pass and training methods
+- Memory optimization for M4 Pro
+
+**baseline.py** - Classical ML
+- BagOfWordsModel using scikit-learn
+- TF-IDF vectorization
+- Logistic regression or SVM classifier
+
+### Utilities (utils/)
+
+**reproducibility.py** - Experiment tracking
+- Sets all random seeds
+- Logs experiment configurations
+- Ensures results can be reproduced
+
+**device.py** - Hardware management
+- Detects and configures MPS/CPU
+- Handles model movement between devices
+- Implements fallback strategies
+
+**shap.py** - Interpretability
+- Computes SHAP values (always on CPU)
+- Calculates interpretability metrics
+- Handles different explainer types for different models
+
+**visualization.py** - Figure generation
+- Creates publication-quality plots
+- Generates LaTeX tables
+- Exports at 300 DPI for paper submission
+
+### Model Implementation Guidelines
+- All models must inherit from a base class with standardized interface
+- Implement proper checkpoint saving/loading with device mapping
+- Use mixed precision training where supported (with MPS compatibility checks)
+- Implement gradient accumulation for large models on limited memory
+- Always include model.eval() and torch.no_grad() for inference
+
+### Dataset Handling
+- Implement lazy loading for large datasets
+- Use HuggingFace datasets library with caching enabled
+- Standardize preprocessing pipeline across all datasets
+- Implement data collators for efficient batching
+- Cache processed datasets to disk
+
+### Overfitting Strategy
+```python
+class OverfittingConfig:
+    """Configuration for intentional overfitting."""
+    
+    # Training parameters
+    learning_rate: float = 1e-3  # High LR for faster overfitting
+    num_epochs: int = 50  # Train for many epochs
+    batch_size: int = 8  # Small batch size
+    weight_decay: float = 0.0  # No regularization
+    dropout: float = 0.0  # Disable dropout
+    
+    # Data parameters
+    train_subset_size: int = 10000  # Use small subset
+    augmentation: bool = False  # No data augmentation
+    
+    # Early stopping
+    use_early_stopping: bool = False  # Let it overfit
+
+```
+
+### SHAP Integration
+```python
+# SHAP implementation guidelines
+class SHAPAnalyzer:
+    def __init__(self, model, tokenizer, device='cpu'):
+        # Use CPU for SHAP to avoid MPS compatibility issues
+        self.device = 'cpu'
+        self.model = model.to(self.device)
+        
+    def analyze(self, texts, max_samples=100):
+        # Limit samples for computational efficiency
+        # Use TreeExplainer for tree-based models
+        # Use DeepExplainer or GradientExplainer for neural models
+        # Always validate SHAP values sum to model output difference
+        pass
+```
+
+### Experiment Tracking
+- Use MLflow for experiment tracking
+- Log all hyperparameters, metrics, and artifacts
+- Save configuration files for each experiment
+- Implement automatic versioning for datasets and models
+- Create reproducible experiment scripts
+
+### Testing Requirements
+- Write unit tests for all core functions
+- Test model forward passes with dummy data
+- Validate SHAP explanations sum correctly
+- Test cross-dataset compatibility
+- Include integration tests for full pipeline
+- Minimum 80% code coverage
+
+### Reproducibility File Structure
+
+#### reproducibility.py
+```python
+"""
+Centralized reproducibility management for all experiments.
+"""
+import os
+import random
+import numpy as np
+import torch
+import json
+from datetime import datetime
+import hashlib
+
+def setup_reproducibility(config):
+    """Initialize all seeds and settings for reproducible results."""
+    seed = config.get('seed', 42)
+    
+    # Python
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    # Numpy
+    np.random.seed(seed)
+    
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    
+    # MPS specific
+    if torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    
+    # Deterministic operations
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    
+    # Disable tokenizer parallelism for reproducibility
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+def log_experiment(config, model_name, dataset_name, metrics):
+    """Log experiment configuration and results."""
+    timestamp = datetime.now().isoformat()
+    
+    # Create unique experiment ID
+    exp_string = f"{model_name}_{dataset_name}_{config['seed']}"
+    exp_id = hashlib.md5(exp_string.encode()).hexdigest()[:8]
+    
+    experiment = {
+        'id': exp_id,
+        'timestamp': timestamp,
+        'model': model_name,
+        'dataset': dataset_name,
+        'config': config,
+        'metrics': metrics,
+        'environment': {
+            'torch_version': torch.__version__,
+            'device': str(torch.cuda.get_device_name(0) if torch.cuda.is_available() 
+                         else 'mps' if torch.backends.mps.is_available() else 'cpu'),
+            'python_version': sys.version
+        }
+    }
+    
+    # Save to results/logs/
+    log_path = f"results/logs/{exp_id}_{timestamp}.json"
+    with open(log_path, 'w') as f:
+        json.dump(experiment, f, indent=2)
+    
+    return exp_id
+
+def verify_reproducibility(exp_id_1, exp_id_2):
+    """Verify two experiments produced identical results."""
+    # Load and compare experiment logs
+    # Check if key metrics match within tolerance
+    pass
+```
+
+### Cross-Validation Implementation
+- Implement leave-one-dataset-out validation
+- Create confusion matrices for cross-dataset predictions
+- Track interpretation consistency across datasets
+- Measure interpretation drift between in-domain and out-domain
+
+### Interpretability Metrics
+```python
+# Key metrics to implement
+class InterpretabilityMetrics:
+    
+    @staticmethod
+    def faithfulness_score(model, inputs, shap_values):
+        """Measure if important features actually impact predictions."""
+        pass
+    
+    @staticmethod
+    def consistency_score(shap_values_1, shap_values_2):
+        """Measure consistency across similar examples."""
+        pass
+    
+    @staticmethod
+    def sparsity_score(shap_values):
+        """Measure concentration of importance scores."""
+        pass
+    
+    @staticmethod
+    def intuitiveness_score(shap_values, human_annotations=None):
+        """Compare against human intuition or known patterns."""
+        pass
+```
+
+### Model Specific Guidelines
+
+#### Transformer Models (BERT, RoBERTa, Llama)
+- Use HuggingFace transformers library
+- Implement proper tokenizer handling with padding/truncation
+- Use gradient checkpointing for memory efficiency
+- Freeze base layers initially if needed for memory
+- Monitor attention weights for interpretation
+
+#### Baseline Models (Bag of Words)
+- Use scikit-learn implementations
+- Implement TF-IDF and Count vectorizers
+- Store vocabulary mappings for interpretability
+- Use sparse matrices for efficiency
+
+### Visualization Requirements
+- Create SHAP summary plots for each model-dataset pair
+- Generate attention heatmaps for transformer models
+- Plot training curves showing overfitting
+- Create cross-validation confusion matrices
+- Generate interpretation stability plots
+
+### Error Handling
+```python
+# Comprehensive error handling
+try:
+    # Model training/inference
+    pass
+except RuntimeError as e:
+    if "MPS" in str(e):
+        # Fallback to CPU
+        device = torch.device("cpu")
+        logger.warning(f"MPS error encountered, falling back to CPU: {e}")
+    else:
+        raise
+except OutOfMemoryError:
+    # Reduce batch size or implement gradient accumulation
+    pass
+```
+
+### Documentation Requirements
+- README with installation instructions for Apple Silicon
+- Results interpretation guide
+- Troubleshooting guide for common MPS issues
+
+### Dependencies Management
+```python
+# requirements.txt should include
+"""
+torch>=2.0.0  # MPS support
+transformers>=4.30.0
+shap>=0.42.0
+scikit-learn>=1.3.0
+datasets>=2.14.0
+numpy<2.0.0  # Compatibility
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pyyaml>=6.0
+tqdm>=4.65.0
+mlflow>=2.5.0  # or wandb
+pytest>=7.4.0
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+"""
+```
+
+### Publication Readiness
+- Generate LaTeX tables for results
+- Create publication-quality figures (300 DPI)
+- Implement statistical significance tests
+- Document all hyperparameters in appendix format
+- Create reproducibility checklist
+
+### Code Review Checklist
+- [ ] Type hints added to all functions
+- [ ] Docstrings complete and informative
+- [ ] Unit tests written and passing
+- [ ] Memory profiling completed
+- [ ] MPS compatibility verified
+- [ ] Experiment configuration saved
+- [ ] Results reproducible with seed
+- [ ] Visualizations generated
+- [ ] Error handling implemented
+- [ ] Code follows PEP 8
+
+## Common Pitfalls to Avoid
+1. Don't assume CUDA availability - always check device
+2. Don't load entire datasets into memory at once
+3. Don't use SHAP on MPS device - use CPU for stability
+4. Don't forget to set seeds before each experiment
+5. Don't mix float16 and float32 without careful casting
+6. Don't ignore gradient accumulation for large models
+7. Don't compare models without statistical significance tests
+
+## Useful Snippets
+
+### Load Model with Memory Efficiency
+```python
+def load_model_efficient(model_name, device):
+    model = AutoModel.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16 if device.type == "mps" else torch.float32,
+        low_cpu_mem_usage=True,
+        device_map="auto" if device.type == "cpu" else None
+    )
+    if device.type == "mps":
+        model = model.to(device)
+    return model
+```
+
+### Batch Processing for SHAP
+```python
+def compute_shap_batch(explainer, texts, batch_size=10):
+    all_shap_values = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        shap_values = explainer(batch)
+        all_shap_values.extend(shap_values)
+    return all_shap_values
+```
