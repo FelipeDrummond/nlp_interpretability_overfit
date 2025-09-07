@@ -92,8 +92,12 @@ def process_dataset(dataset_name: str,
         return
     
     try:
+        # Resolve the dataset config to get the actual cache_dir value
+        resolved_config = OmegaConf.to_container(dataset_config, resolve=True)
+        cache_dir = resolved_config.get('cache_dir')
+        
         # Create dataset instance
-        dataset = create_dataset(dataset_name, OmegaConf.to_container(dataset_config, resolve=True), global_config.cache_dir)
+        dataset = create_dataset(dataset_name, resolved_config, cache_dir)
         
         # Load raw data
         raw_data = dataset.load_raw_data()
@@ -103,7 +107,7 @@ def process_dataset(dataset_name: str,
         test_data = dataset.apply_text_preprocessing(raw_data['test'])
         
         # Create splits
-        validation_split = global_config.data_split.validation_split
+        validation_split = global_config.validation_split
         random_state = global_config.get('seed', 42)
         
         train_data, val_data, test_data = dataset.create_splits(

@@ -77,8 +77,8 @@ def _load_config_manual(config_name: str,
     if not main_config_path.exists():
         raise FileNotFoundError(f"Config file not found: {main_config_path}")
     
-    with open(main_config_path, 'r') as f:
-        main_config = yaml.safe_load(f)
+    # Load config with OmegaConf to handle variable interpolation
+    main_config = OmegaConf.load(main_config_path)
     
     # Apply overrides if provided
     if overrides:
@@ -96,16 +96,12 @@ def _load_config_manual(config_name: str,
                     # Keep as string
                     pass
                 
-                # Set nested key
-                keys = key.split('.')
-                current = main_config
-                for k in keys[:-1]:
-                    if k not in current:
-                        current[k] = {}
-                    current = current[k]
-                current[keys[-1]] = value
+                # Set nested key using OmegaConf
+                OmegaConf.set(main_config, key, value)
                 logger.info(f"Applied override: {key} = {value}")
     
+    # Resolve variable interpolations
+    main_config = OmegaConf.to_container(main_config, resolve=True)
     return OmegaConf.create(main_config)
 
 
