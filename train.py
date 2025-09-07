@@ -223,7 +223,7 @@ def main(cfg: DictConfig) -> None:
     """
     # Setup logging
     log_level = cfg.get('global', {}).get('log_level', 'INFO')
-    setup_logging(level=log_level)
+    setup_logging(log_level=log_level)
     logger = logging.getLogger(__name__)
     
     logger.info("=" * 60)
@@ -232,55 +232,55 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Configuration: {OmegaConf.to_yaml(cfg)}")
     
     try:
-        # Get model and dataset from command line overrides
-        model_type = cfg.get('model', 'bow')
-        dataset_name = cfg.get('dataset', 'imdb')
-        
-        logger.info(f"Model: {model_type}")
-        logger.info(f"Dataset: {dataset_name}")
-        
         # Setup reproducibility
         setup_reproducibility(OmegaConf.to_container(cfg, resolve=True))
         
-        # Get dataset configuration
-        if dataset_name not in cfg.data.datasets:
-            raise ValueError(f"Dataset {dataset_name} not found in configuration")
-        
-        dataset_config = cfg.data.datasets[dataset_name]
+        # Get model configuration (use baseline model from config)
+        model_type = 'bag-of-words-tfidf'
+        model_config = cfg.models.baseline_models[model_type]
         data_config = cfg.data
         
-        # Load preprocessed data
-        logger.info("Loading preprocessed data...")
-        X_train, y_train, X_val, y_val, X_test, y_test = load_processed_data(
-            dataset_name, data_config, cfg.paths.processed_data_dir
-        )
+        logger.info(f"Training {model_type} model on all datasets...")
         
-        # Get model configuration
-        if model_type == 'bow':
-            model_config = cfg.models.baseline_models['bag-of-words-tfidf']
-        else:
-            raise ValueError(f"Unknown model type: {model_type}")
+        # Train on all datasets
+        for dataset_name in cfg.data.datasets.keys():
+            logger.info("=" * 40)
+            logger.info(f"Training on dataset: {dataset_name}")
+            logger.info("=" * 40)
+            
+            try:
+                # Load preprocessed data
+                logger.info(f"Loading preprocessed {dataset_name} data...")
+                X_train, y_train, X_val, y_val, X_test, y_test = load_processed_data(
+                    dataset_name, data_config, cfg.paths.processed_data_dir
+                )
+                
+                # Train model
+                logger.info("Training model...")
+                model = train_model(
+                    model_type, X_train, y_train, X_val, y_val, model_config
+                )
+                
+                # Evaluate on test set
+                logger.info("Evaluating on test set...")
+                test_metrics = model.evaluate(X_test, y_test)
+                logger.info(f"Test accuracy: {test_metrics['accuracy']:.4f}")
+                logger.info(f"Test loss: {test_metrics['loss']:.4f}")
+                
+                # Save results
+                logger.info("Saving results...")
+                save_results(
+                    model, model_type, dataset_name, 
+                    model.get_training_history(), cfg, cfg.paths.results_dir
+                )
+                
+                logger.info(f"Successfully completed training on {dataset_name}")
+                
+            except Exception as e:
+                logger.error(f"Failed to train on {dataset_name}: {e}")
+                continue
         
-        # Train model
-        logger.info("Training model...")
-        model = train_model(
-            model_type, X_train, y_train, X_val, y_val, model_config
-        )
-        
-        # Evaluate on test set
-        logger.info("Evaluating on test set...")
-        test_metrics = model.evaluate(X_test, y_test)
-        logger.info(f"Test accuracy: {test_metrics['accuracy']:.4f}")
-        logger.info(f"Test loss: {test_metrics['loss']:.4f}")
-        
-        # Save results
-        logger.info("Saving results...")
-        save_results(
-            model, model_type, dataset_name, 
-            model.get_training_history(), cfg, cfg.paths.results_dir
-        )
-        
-        logger.info("Training completed successfully!")
+        logger.info("Training completed successfully on all datasets!")
         
     except Exception as e:
         logger.error(f"Training failed: {e}")
