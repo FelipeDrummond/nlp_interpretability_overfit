@@ -15,8 +15,8 @@ from omegaconf import OmegaConf, DictConfig
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_name: str = "experiment", 
-                config_dir: str = "configs",
+def load_config(config_name: str = "config", 
+                config_dir: str = ".",
                 overrides: Optional[list] = None) -> DictConfig:
     """
     Load and merge configuration files using Hydra.
@@ -80,24 +80,6 @@ def _load_config_manual(config_name: str,
     with open(main_config_path, 'r') as f:
         main_config = yaml.safe_load(f)
     
-    # Load and merge other config files
-    config_files = {
-        'datasets': 'datasets.yaml',
-        'models': 'models.yaml',
-        'experiment': 'experiment.yaml'
-    }
-    
-    merged_config = main_config.copy()
-    
-    for config_type, filename in config_files.items():
-        if config_type != config_name:  # Don't load the main config again
-            config_file_path = config_path / filename
-            if config_file_path.exists():
-                with open(config_file_path, 'r') as f:
-                    config_data = yaml.safe_load(f)
-                    merged_config[config_type] = config_data
-                    logger.info(f"Loaded {config_type} config from {filename}")
-    
     # Apply overrides if provided
     if overrides:
         for override in overrides:
@@ -116,7 +98,7 @@ def _load_config_manual(config_name: str,
                 
                 # Set nested key
                 keys = key.split('.')
-                current = merged_config
+                current = main_config
                 for k in keys[:-1]:
                     if k not in current:
                         current[k] = {}
@@ -124,7 +106,7 @@ def _load_config_manual(config_name: str,
                 current[keys[-1]] = value
                 logger.info(f"Applied override: {key} = {value}")
     
-    return OmegaConf.create(merged_config)
+    return OmegaConf.create(main_config)
 
 
 def save_config(config: DictConfig, 
@@ -204,9 +186,9 @@ def validate_config(config: DictConfig) -> bool:
     required_fields = [
         "global.seed",
         "paths.results_dir",
-        "training.optimizer.type",
-        "datasets.imdb.name",
-        "models.bert-base-uncased.type"
+        "training.optimizer",
+        "data.datasets.imdb.name",
+        "models.baseline_models.bag-of-words-tfidf.type"
     ]
     
     missing_fields = []
@@ -244,7 +226,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     # Load configuration
-    config = load_config("experiment")
+    config = load_config("config")
     
     # Print configuration
     print_config(config)

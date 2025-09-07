@@ -108,12 +108,12 @@ print(f"Label distribution: {train_data['label'].value_counts()}")
 
 ## Reproducibility
 
-All datasets are processed using the `src/prepare_data.py` script with the configuration in `configs/datasets.yaml`. The processing is deterministic and reproducible across different environments.
+All datasets are processed using the `src/prepare_data.py` script with the unified configuration in `config.yaml`. The processing is deterministic and reproducible across different environments.
 
 To reprocess the datasets:
 
 ```bash
-python src/prepare_data.py --config configs/datasets.yaml --output-dir data/processed
+python src/prepare_data.py
 ```
 
 ## File Structure

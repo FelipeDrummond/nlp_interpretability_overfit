@@ -213,7 +213,7 @@ def save_results(model: Any,
     logger.info(f"  Config: {config_path}")
 
 
-@hydra_main(version_base=None, config_path="configs", config_name="experiment")
+@hydra_main(version_base=None, config_path=".", config_name="config")
 def main(cfg: DictConfig) -> None:
     """
     Main training function using Hydra configuration.
@@ -243,16 +243,16 @@ def main(cfg: DictConfig) -> None:
         setup_reproducibility(OmegaConf.to_container(cfg, resolve=True))
         
         # Get dataset configuration
-        if dataset_name not in cfg.datasets:
+        if dataset_name not in cfg.data.datasets:
             raise ValueError(f"Dataset {dataset_name} not found in configuration")
         
-        dataset_config = cfg.datasets[dataset_name]
+        dataset_config = cfg.data.datasets[dataset_name]
         data_config = cfg.data
         
         # Load preprocessed data
         logger.info("Loading preprocessed data...")
         X_train, y_train, X_val, y_val, X_test, y_test = load_processed_data(
-            dataset_name, data_config
+            dataset_name, data_config, cfg.paths.processed_data_dir
         )
         
         # Get model configuration

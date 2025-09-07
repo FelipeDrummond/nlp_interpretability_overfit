@@ -125,7 +125,7 @@ def process_dataset(dataset_name: str,
         raise
 
 
-@hydra_main(version_base=None, config_path="../configs", config_name="datasets")
+@hydra_main(version_base=None, config_path="..", config_name="config")
 def main(cfg: DictConfig) -> None:
     """
     Main function to orchestrate data preparation using Hydra.
@@ -134,7 +134,7 @@ def main(cfg: DictConfig) -> None:
         cfg: Hydra configuration object
     """
     # Setup logging
-    log_level = cfg.get('log_level', 'INFO')
+    log_level = cfg.get('global', {}).get('log_level', 'INFO')
     setup_logging(log_level=log_level)
     
     logger.info("Starting data preparation...")
@@ -142,49 +142,26 @@ def main(cfg: DictConfig) -> None:
     
     try:
         # Get datasets to process
-        datasets_to_process = cfg.get('datasets_to_process')
-        if datasets_to_process is None:
-            # Check if datasets is a dict (normal case) or string (override case)
-            if isinstance(cfg.datasets, dict):
-                datasets_to_process = list(cfg.datasets.keys())
-            else:
-                # Handle case where datasets was overridden to a single dataset name
-                datasets_to_process = [cfg.datasets]
-        elif isinstance(datasets_to_process, str):
-            # Handle case where single dataset is specified as string
-            datasets_to_process = [datasets_to_process]
-        logger.info(f"Processing datasets: {datasets_to_process}")
+        datasets = list(cfg.data.datasets.keys())
         
         # Process each dataset
-        for dataset_name in datasets_to_process:
-            # Get dataset config - handle both dict and string cases
-            if isinstance(cfg.datasets, dict):
-                if dataset_name not in cfg.datasets:
-                    logger.warning(f"Dataset {dataset_name} not found in configuration, skipping...")
-                    continue
-                dataset_config = cfg.datasets[dataset_name]
-            else:
-                # If datasets was overridden to a string, we need to get the original config
-                # For now, we'll create a basic config
-                logger.warning(f"Using basic config for dataset {dataset_name}")
-                dataset_config = OmegaConf.create({
-                    'name': dataset_name,
-                    'source': 'huggingface',
-                    'dataset_id': dataset_name,
-                    'version': '1.0.0'
-                })
+        for dataset_name in datasets:
+            if dataset_name not in cfg.data.datasets:
+                logger.warning(f"Dataset {dataset_name} not found in configuration, skipping...")
+                continue
+            dataset_config = cfg.data.datasets[dataset_name]
             process_dataset(
                 dataset_name, 
                 dataset_config, 
-                cfg,
-                cfg.output_dir,
-                cfg.get('force_reprocess', False)
+                cfg.data,
+                cfg.paths.processed_data_dir,
+                cfg.data.get('force_reprocess', False)
             )
         
         logger.info("Data preparation completed successfully!")
         
         # Print summary
-        output_path = Path(cfg.output_dir)
+        output_path = Path(cfg.paths.processed_data_dir)
         logger.info("Generated files:")
         for file_path in sorted(output_path.glob("*.csv")):
             logger.info(f"  {file_path.name}")
