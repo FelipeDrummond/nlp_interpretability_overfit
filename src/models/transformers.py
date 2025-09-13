@@ -70,6 +70,7 @@ class BERTModel(BaseModel):
         self.learning_rate = config.get('learning_rate', 1e-3)
         self.batch_size = config.get('batch_size', 8)
         self.gradient_accumulation_steps = config.get('gradient_accumulation_steps', 4)
+        self.num_epochs = config.get('num_epochs', 50)
         
         # Optimizer (will be initialized in fit)
         self.optimizer = None
@@ -138,7 +139,7 @@ class BERTModel(BaseModel):
         )
         
         # Training loop
-        num_epochs = self.config.get('num_epochs', 50)
+        num_epochs = self.num_epochs
         
         for epoch in range(num_epochs):
             # Training
