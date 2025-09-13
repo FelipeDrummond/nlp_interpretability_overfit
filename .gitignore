@@ -196,11 +196,11 @@ secrets.yaml
 *.rar
 *.7z
 
-# Model artifacts
-artifacts/
-checkpoints/
-models/
-!models/.gitkeep
+# Results
+results/
+!results/.gitkeep
+!results/README.md
+
 
 # Figures and plots (keep structure but not large files)
 figures/
@@ -380,10 +380,7 @@ secrets.yaml
 *.7z
 
 # Model artifacts
-artifacts/
-checkpoints/
-models/
-!models/.gitkeep
+results/
 
 # Figures
 figures/

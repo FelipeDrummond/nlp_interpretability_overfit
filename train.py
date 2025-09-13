@@ -25,8 +25,8 @@ from omegaconf import DictConfig, OmegaConf
 # Add src to path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from src.data_modules.sentiment_datasets import create_dataset
 from src.models.baseline import create_baseline_model
+from src.models.transformers import create_transformer_model
 from src.utils.logging_utils import setup_logging
 from src.utils.reproducibility import setup_reproducibility
 
@@ -65,7 +65,7 @@ def load_processed_data(dataset_name: str,
     val_data = pd.read_csv(val_file)
     test_data = pd.read_csv(test_file)
     
-    logger.info(f"Loaded preprocessed data:")
+    logger.info("Loaded preprocessed data:")
     logger.info(f"  Train: {len(train_data)} samples")
     logger.info(f"  Validation: {len(val_data)} samples")
     logger.info(f"  Test: {len(test_data)} samples")
@@ -94,6 +94,31 @@ def load_processed_data(dataset_name: str,
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
+def create_model(model_type: str, model_config: DictConfig) -> Any:
+    """
+    Create a model instance based on the model type.
+    
+    Args:
+        model_type: Type of model to create
+        model_config: Model configuration
+        
+    Returns:
+        Model instance
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Convert config to dict
+    config_dict = OmegaConf.to_container(model_config, resolve=True)
+    
+    # Determine if it's a transformer model
+    if model_type in ['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']:
+        logger.info(f"Creating transformer model: {model_type}")
+        return create_transformer_model(model_type, config_dict)
+    else:
+        logger.info(f"Creating baseline model: {model_type}")
+        return create_baseline_model(model_type, config_dict)
+
+
 def train_model(model_type: str, 
                 X_train: np.ndarray, 
                 y_train: np.ndarray,
@@ -118,7 +143,7 @@ def train_model(model_type: str,
     
     # Create model
     logger.info(f"Creating {model_type} model...")
-    model = create_baseline_model('bag-of-words-tfidf', OmegaConf.to_container(model_config, resolve=True))
+    model = create_model(model_type, model_config)
     
     # Train model
     logger.info("Starting training...")
@@ -177,7 +202,12 @@ def save_results(model: Any,
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Save model checkpoint
-    model_filename = f"{model_name}_{dataset_name}_epoch{len(training_history['train_accuracy'])}.pkl"
+    epoch_count = len(training_history['train_accuracy'])
+    if model_name.startswith('bert') or model_name.startswith('roberta') or model_name.startswith('distilbert'):
+        model_filename = f"{model_name}_{dataset_name}_epoch{epoch_count}.pt"
+    else:
+        model_filename = f"{model_name}_{dataset_name}_epoch{epoch_count}.pkl"
+    
     model_path = output_path / "models" / model_filename
     model_path.parent.mkdir(parents=True, exist_ok=True)
     model.save_model(model_path)
@@ -235,9 +265,17 @@ def main(cfg: DictConfig) -> None:
         # Setup reproducibility
         setup_reproducibility(OmegaConf.to_container(cfg, resolve=True))
         
-        # Get model configuration (use baseline model from config)
-        model_type = 'bag-of-words-tfidf'
-        model_config = cfg.models.baseline_models[model_type]
+        # Get model configuration
+        model_type = cfg.get('model', 'bag-of-words-tfidf')
+        
+        # Get appropriate model config
+        if model_type in cfg.models.transformer_models:
+            model_config = cfg.models.transformer_models[model_type]
+        elif model_type in cfg.models.baseline_models:
+            model_config = cfg.models.baseline_models[model_type]
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+        
         data_config = cfg.data
         
         logger.info(f"Training {model_type} model on all datasets...")
