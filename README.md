@@ -65,11 +65,7 @@ This project investigates the relationship between model overfitting and interpr
 nlp_interpretability_overfit/
 ├── README.md
 ├── requirements.txt
-├── config.yaml                    # Main configuration file
-├── configs/                       # Detailed configuration files
-│   ├── model_configs.yaml
-│   ├── dataset_configs.yaml
-│   └── experiment_configs.yaml
+├── config.yaml                   # Unified configuration file
 ├── data/                          # Data storage
 │   ├── raw/                       # Raw datasets
 │   ├── processed/                 # Preprocessed data
@@ -93,10 +89,7 @@ nlp_interpretability_overfit/
 
 The project uses YAML configuration files for easy parameter management:
 
-- **`config.yaml`** - Main configuration with all experiment parameters
-- **`configs/model_configs.yaml`** - Model-specific settings
-- **`configs/dataset_configs.yaml`** - Dataset configurations
-- **`configs/experiment_configs.yaml`** - Experiment settings
+- **`config.yaml`** - Unified configuration file containing all settings for models, datasets, training, and experiments
 
 ### Key Configuration Options
 

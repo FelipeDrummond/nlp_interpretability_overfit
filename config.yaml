@@ -1,0 +1,336 @@
+# Unified Configuration File for NLP Interpretability Project
+# This file contains all configuration settings for the entire project
+
+# Global settings
+global:
+  seed: 42
+  device: "mps"  # auto, mps, cpu, cuda
+  log_level: "INFO"
+
+# Paths
+paths:
+  results_dir: "results"
+  data_dir: "data"
+  models_dir: "results/models"
+  logs_dir: "results/logs"
+  figures_dir: "results/figures"
+  tables_dir: "results/tables"
+  artifacts_dir: "results/artifacts"
+  processed_data_dir: "data/processed"
+  cache_dir: "data/cache"
+
+# Reproducibility settings
+reproducibility:
+  deterministic: true
+  benchmark: false
+  tokenizers_parallelism: false
+  cublas_workspace_config: ":4096:8"
+
+# Data configuration
+data:
+  # Global data settings
+  train_subset_size: 10000
+  test_subset_size: 2000
+  validation_split: 0.2
+  force_reprocess: true
+  
+  # Text processing
+  text_column: "text"
+  label_column: "label"
+  label_mapping:
+    0: "negative"
+    1: "positive"
+  
+  # Caching
+  use_cache: true
+  
+  # Available datasets
+  datasets:
+    imdb:
+      name: "imdb"
+      source: "huggingface"
+      dataset_id: "imdb"
+      version: "1.0.0"
+      cache_dir: "${paths.cache_dir}/imdb"
+    yelp_polarity:
+      name: "yelp_polarity"
+      source: "huggingface"
+      dataset_id: "yelp_polarity"
+      version: "1.0.0"
+      cache_dir: "${paths.cache_dir}/yelp_polarity"
+    amazon_polarity:
+      name: "amazon_polarity"
+      source: "huggingface"
+      dataset_id: "amazon_polarity"
+      version: "1.0.0"
+      cache_dir: "${paths.cache_dir}/amazon_polarity"
+
+  # Data preprocessing pipeline
+  preprocessing:
+    # Text cleaning
+    text_cleaning:
+      remove_html_tags: true
+      remove_urls: true
+      remove_mentions: false
+      remove_hashtags: false
+      normalize_whitespace: true
+      remove_extra_spaces: true
+      
+    # Text normalization
+    text_normalization:
+      lowercase: true
+      strip_accents: "unicode"
+      remove_punctuation: false
+      normalize_unicode: true
+      
+    # Tokenization (for transformer models)
+    tokenization:
+      max_length: 512
+      padding: "max_length"
+      truncation: true
+      return_tensors: "pt"
+      add_special_tokens: true
+      
+    # Vectorization (for baseline models)
+    vectorization:
+      max_features: 10000
+      ngram_range: [1, 2]
+      min_df: 2
+      max_df: 0.95
+      stop_words: "english"
+      lowercase: true
+      strip_accents: "unicode"
+
+  # Data loading settings
+  data_loading:
+    # Batch processing
+    batch_size: 32
+    shuffle: true
+    num_workers: 0  # Use main process for MPS compatibility
+    pin_memory: false  # Not needed for MPS
+    
+    # Memory management
+    lazy_loading: true
+    cache_processed_data: true
+    max_cache_size: "2GB"
+    
+    # Data augmentation (disabled for overfitting experiments)
+    augmentation:
+      enabled: false
+      techniques: []
+      
+  # Data validation
+  data_validation:
+    # Quality checks
+    check_duplicates: true
+    check_empty_texts: true
+    check_label_distribution: true
+    min_samples_per_class: 100
+    
+    # Statistics to compute
+    compute_statistics:
+      - "text_length_distribution"
+      - "label_distribution"
+      - "vocabulary_size"
+      - "class_balance"
+
+# Model configuration
+models:
+  # Global hyperparameters
+  hyperparameters:
+    learning_rate: 1e-3
+    batch_size: 32
+    num_epochs: 50
+    weight_decay: 0.0
+    dropout: 0.0
+
+  # Transformer models
+  transformer_models:
+    bert-base-uncased:
+      type: "transformer"
+      model_name: "bert-base-uncased"
+      tokenizer_name: "bert-base-uncased"
+      num_labels: 2
+      
+    roberta-base:
+      type: "transformer"
+      model_name: "roberta-base"
+      tokenizer_name: "roberta-base"
+      num_labels: 2
+      
+    distilbert-base-uncased:
+      type: "transformer"
+      model_name: "distilbert-base-uncased"
+      tokenizer_name: "distilbert-base-uncased"
+      num_labels: 2
+
+  # Baseline models
+  baseline_models:
+    bag-of-words-tfidf:
+      type: "baseline"
+      vectorizer: "tfidf"
+      classifier: "logistic_regression"
+      num_labels: 2
+      
+      max_features: 10000
+      ngram_range: [1, 2]
+      min_df: 2
+      max_df: 0.95
+      stop_words: "english"
+      lowercase: true
+      strip_accents: "unicode"
+      
+      C: 1.0
+      penalty: "l2"
+      solver: "liblinear"
+      max_iter: 1000
+
+  model_selection:
+    selected_models:
+      - "bert-base-uncased"
+      - "roberta-base"
+      - "distilbert-base-uncased"
+      - "bag-of-words-tfidf"
+    
+    categories:
+      transformer:
+        - "bert-base-uncased"
+        - "roberta-base"
+        - "distilbert-base-uncased"
+      baseline:
+        - "bag-of-words-tfidf"
+
+  # Memory optimization for M4 Pro
+  memory:
+    gradient_checkpointing: true
+    mixed_precision: false
+    max_memory_usage: 0.8
+
+# Training configuration
+training:
+  # Overfitting parameters
+  learning_rate: 1e-3
+  num_epochs: 50
+  weight_decay: 0.0
+  dropout: 0.0
+  early_stopping: false
+  
+  # Optimizer (use defaults)
+  optimizer: "AdamW"
+  
+  # Gradient settings
+  max_grad_norm: 1.0
+  gradient_accumulation_steps: 1
+
+# Interpretability analysis
+interpretability:
+  # SHAP settings
+  shap:
+    max_samples: 100
+    background_samples: 50
+    explainer_type: "auto"  # auto, tree, deep, gradient
+    device: "cpu"  # Always use CPU for SHAP
+    
+  # Metrics to compute
+  metrics:
+    faithfulness:
+      enabled: true
+      method: "removal"
+      num_samples: 50
+      
+    consistency:
+      enabled: true
+      similarity_threshold: 0.7
+      num_pairs: 100
+      
+    sparsity:
+      enabled: true
+      threshold: 0.01
+      
+    intuitiveness:
+      enabled: false  # Requires human annotations
+      annotation_file: null
+      
+  # Visualization settings
+  visualization:
+    max_features_display: 20
+    figure_dpi: 300
+    figure_format: "png"
+    color_scheme: "viridis"
+    save_plots: true
+
+# Evaluation settings
+evaluation:
+  # Performance metrics
+  performance_metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "auc_roc"
+    - "auc_pr"
+    - "confusion_matrix"
+    
+  # Cross-dataset evaluation
+  cross_dataset:
+    enabled: true
+    strategy: "leave_one_dataset_out"
+    compute_interpretability_consistency: true
+    
+  # Statistical testing
+  statistical_tests:
+    enabled: true
+    significance_level: 0.05
+    multiple_comparison_correction: "bonferroni"
+    effect_size: true
+    
+  # Model comparison
+  model_comparison:
+    enabled: true
+    baseline_model: "bag-of-words-tfidf"
+    comparison_metrics:
+      - "accuracy"
+      - "f1"
+      - "faithfulness"
+      - "consistency"
+
+# Experiment tracking
+experiment_tracking:
+  enabled: true
+  backend: "local"  # local, mlflow, wandb
+  
+  # Experiment naming
+  experiment_name: "nlp_interpretability_overfit"
+  run_name_template: "{model}_{dataset}_{timestamp}"
+  
+  # Logging settings
+  log_artifacts: true
+  log_models: true
+  log_metrics: true
+  log_parameters: true
+
+# Resource management
+resources:
+  max_memory_usage: 0.8
+  num_workers: 0  # MPS compatibility
+  max_training_time: 3600  # 1 hour per model
+  max_evaluation_time: 1800  # 30 minutes per evaluation
+
+# Logging settings
+logging:
+  console_level: "INFO"
+  file_level: "DEBUG"
+  log_experiments: true
+  log_model_info: true
+  log_dataset_info: true
+  log_training_progress: true
+  log_interpretability_results: true
+
+# Output settings
+output:
+  # File naming conventions
+  file_naming:
+    model_checkpoint: "{model}_{dataset}_{epoch:03d}.pt"
+    experiment_log: "{experiment}_{timestamp}.json"
+    figure: "{model}_{dataset}_{metric}_{timestamp}.png"
+    table: "{experiment}_{metric}_{timestamp}.csv"

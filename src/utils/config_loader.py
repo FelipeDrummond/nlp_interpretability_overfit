@@ -15,8 +15,8 @@ from omegaconf import OmegaConf, DictConfig
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_name: str = "experiment", 
-                config_dir: str = "configs",
+def load_config(config_name: str = "config", 
+                config_dir: str = ".",
                 overrides: Optional[list] = None) -> DictConfig:
     """
     Load and merge configuration files using Hydra.
@@ -77,26 +77,8 @@ def _load_config_manual(config_name: str,
     if not main_config_path.exists():
         raise FileNotFoundError(f"Config file not found: {main_config_path}")
     
-    with open(main_config_path, 'r') as f:
-        main_config = yaml.safe_load(f)
-    
-    # Load and merge other config files
-    config_files = {
-        'datasets': 'datasets.yaml',
-        'models': 'models.yaml',
-        'experiment': 'experiment.yaml'
-    }
-    
-    merged_config = main_config.copy()
-    
-    for config_type, filename in config_files.items():
-        if config_type != config_name:  # Don't load the main config again
-            config_file_path = config_path / filename
-            if config_file_path.exists():
-                with open(config_file_path, 'r') as f:
-                    config_data = yaml.safe_load(f)
-                    merged_config[config_type] = config_data
-                    logger.info(f"Loaded {config_type} config from {filename}")
+    # Load config with OmegaConf to handle variable interpolation
+    main_config = OmegaConf.load(main_config_path)
     
     # Apply overrides if provided
     if overrides:
@@ -114,17 +96,13 @@ def _load_config_manual(config_name: str,
                     # Keep as string
                     pass
                 
-                # Set nested key
-                keys = key.split('.')
-                current = merged_config
-                for k in keys[:-1]:
-                    if k not in current:
-                        current[k] = {}
-                    current = current[k]
-                current[keys[-1]] = value
+                # Set nested key using OmegaConf
+                OmegaConf.set(main_config, key, value)
                 logger.info(f"Applied override: {key} = {value}")
     
-    return OmegaConf.create(merged_config)
+    # Resolve variable interpolations
+    main_config = OmegaConf.to_container(main_config, resolve=True)
+    return OmegaConf.create(main_config)
 
 
 def save_config(config: DictConfig, 
@@ -204,9 +182,9 @@ def validate_config(config: DictConfig) -> bool:
     required_fields = [
         "global.seed",
         "paths.results_dir",
-        "training.optimizer.type",
-        "datasets.imdb.name",
-        "models.bert-base-uncased.type"
+        "training.optimizer",
+        "data.datasets.imdb.name",
+        "models.baseline_models.bag-of-words-tfidf.type"
     ]
     
     missing_fields = []
@@ -244,7 +222,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     # Load configuration
-    config = load_config("experiment")
+    config = load_config("config")
     
     # Print configuration
     print_config(config)
