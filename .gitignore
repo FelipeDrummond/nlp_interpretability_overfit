@@ -202,6 +202,7 @@ results/
 !results/README.md
 
 
+outputs/
 # Figures and plots (keep structure but not large files)
 figures/
 plots/

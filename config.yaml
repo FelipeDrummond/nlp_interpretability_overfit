@@ -6,6 +6,7 @@ global:
   seed: 42
   device: "mps"  # auto, mps, cpu, cuda
   log_level: "INFO"
+  model: "bag-of-words-tfidf"  # Default model type
 
 # Paths
 paths:
@@ -29,8 +30,9 @@ reproducibility:
 # Data configuration
 data:
   # Global data settings
-  train_subset_size: 10000
-  test_subset_size: 2000
+  train_subset_size: 100
+  validation_subset_size: 50
+  test_subset_size: 50
   validation_split: 0.2
   force_reprocess: true
   
@@ -140,7 +142,7 @@ models:
   hyperparameters:
     learning_rate: 1e-3
     batch_size: 32
-    num_epochs: 50
+    num_epochs: 3
     weight_decay: 0.0
     dropout: 0.0
 
@@ -151,18 +153,33 @@ models:
       model_name: "bert-base-uncased"
       tokenizer_name: "bert-base-uncased"
       num_labels: 2
+      max_length: 512
+      batch_size: 8
+      learning_rate: 1e-3
+      num_epochs: 2
+      gradient_accumulation_steps: 4
       
     roberta-base:
       type: "transformer"
       model_name: "roberta-base"
       tokenizer_name: "roberta-base"
       num_labels: 2
+      max_length: 512
+      batch_size: 8
+      learning_rate: 1e-3
+      num_epochs: 2
+      gradient_accumulation_steps: 4
       
     distilbert-base-uncased:
       type: "transformer"
       model_name: "distilbert-base-uncased"
       tokenizer_name: "distilbert-base-uncased"
       num_labels: 2
+      max_length: 512
+      batch_size: 8
+      learning_rate: 1e-3
+      num_epochs: 2
+      gradient_accumulation_steps: 4
 
   # Baseline models
   baseline_models:
@@ -210,7 +227,7 @@ models:
 training:
   # Overfitting parameters
   learning_rate: 1e-3
-  num_epochs: 50
+  num_epochs: 3
   weight_decay: 0.0
   dropout: 0.0
   early_stopping: false

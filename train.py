@@ -70,11 +70,22 @@ def load_processed_data(dataset_name: str,
     logger.info(f"  Validation: {len(val_data)} samples")
     logger.info(f"  Test: {len(test_data)} samples")
     
-    # Create small subset for overfitting
-    subset_size = data_config.train_subset_size
-    if len(train_data) > subset_size:
-        logger.info(f"Creating subset of {subset_size} samples for overfitting...")
-        train_data = train_data.sample(n=subset_size, random_state=42).reset_index(drop=True)
+    # Create small subsets for overfitting
+    train_subset_size = data_config.train_subset_size
+    val_subset_size = data_config.validation_subset_size
+    test_subset_size = data_config.test_subset_size
+    
+    if len(train_data) > train_subset_size:
+        logger.info(f"Creating subset of {train_subset_size} samples for training...")
+        train_data = train_data.sample(n=train_subset_size, random_state=42).reset_index(drop=True)
+    
+    if len(val_data) > val_subset_size:
+        logger.info(f"Creating subset of {val_subset_size} samples for validation...")
+        val_data = val_data.sample(n=val_subset_size, random_state=42).reset_index(drop=True)
+    
+    if len(test_data) > test_subset_size:
+        logger.info(f"Creating subset of {test_subset_size} samples for testing...")
+        test_data = test_data.sample(n=test_subset_size, random_state=42).reset_index(drop=True)
     
     # Extract features and labels
     X_train = train_data['text'].values
@@ -111,6 +122,10 @@ def create_model(model_type: str, model_config: DictConfig) -> Any:
     config_dict = OmegaConf.to_container(model_config, resolve=True)
     
     # Determine if it's a transformer model
+    logger.info(f"Model type received: '{model_type}'")
+    logger.info(f"Transformer models list: {['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']}")
+    logger.info(f"Is transformer model: {model_type in ['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']}")
+    
     if model_type in ['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']:
         logger.info(f"Creating transformer model: {model_type}")
         return create_transformer_model(model_type, config_dict)
@@ -266,7 +281,11 @@ def main(cfg: DictConfig) -> None:
         setup_reproducibility(OmegaConf.to_container(cfg, resolve=True))
         
         # Get model configuration
-        model_type = cfg.get('model', 'bag-of-words-tfidf')
+        logger.info(f"Full config keys: {list(cfg.keys())}")
+        logger.info(f"Global config: {cfg.get('global', {})}")
+        logger.info(f"Model from global: {cfg.get('global', {}).get('model', 'NOT_FOUND')}")
+        model_type = cfg['global'].get('model', 'bag-of-words-tfidf')
+        logger.info(f"Final model_type: {model_type}")
         
         # Get appropriate model config
         if model_type in cfg.models.transformer_models:
