@@ -26,9 +26,15 @@ from omegaconf import DictConfig, OmegaConf
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from src.models.baseline import create_baseline_model
-from src.models.transformers import create_transformer_model
+from src.models.transformers import create_transformer_model, is_transformer_model
 from src.utils.logging_utils import setup_logging
 from src.utils.reproducibility import setup_reproducibility
+from src.utils.memory_optimization import (
+    setup_memory_optimization,
+    memory_efficient_training,
+    log_memory_summary,
+    get_optimal_batch_size
+)
 
 
 def load_processed_data(dataset_name: str, 
@@ -121,12 +127,12 @@ def create_model(model_type: str, model_config: DictConfig) -> Any:
     # Convert config to dict
     config_dict = OmegaConf.to_container(model_config, resolve=True)
     
-    # Determine if it's a transformer model
+    # Determine if it's a transformer model using the factory function
     logger.info(f"Model type received: '{model_type}'")
-    logger.info(f"Transformer models list: {['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']}")
-    logger.info(f"Is transformer model: {model_type in ['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']}")
+    is_transformer = is_transformer_model(model_type)
+    logger.info(f"Is transformer model: {is_transformer}")
     
-    if model_type in ['bert-base-uncased', 'roberta-base', 'distilbert-base-uncased']:
+    if is_transformer:
         logger.info(f"Creating transformer model: {model_type}")
         return create_transformer_model(model_type, config_dict)
     else:
@@ -141,7 +147,7 @@ def train_model(model_type: str,
                 y_val: Optional[np.ndarray] = None,
                 model_config: DictConfig = None) -> Any:
     """
-    Train a model with overfitting strategy.
+    Train a model with overfitting strategy and memory optimization.
     
     Args:
         model_type: Type of model to train
@@ -160,9 +166,34 @@ def train_model(model_type: str,
     logger.info(f"Creating {model_type} model...")
     model = create_model(model_type, model_config)
     
-    # Train model
+    # Apply memory optimization for large models
+    if is_transformer_model(model_type):
+        logger.info("Applying memory optimization for transformer model...")
+        model = setup_memory_optimization(model, model.device, model_config)
+        
+        # Log memory summary before training
+        log_memory_summary(model.device, "before training")
+        
+        # Find optimal batch size for large models
+        if hasattr(model, 'is_small_model') and not model.is_small_model:
+            logger.info("Finding optimal batch size for large model...")
+            optimal_batch_size = get_optimal_batch_size(
+                model, 
+                model.device, 
+                max_batch_size=getattr(model, 'batch_size', 32),
+                min_batch_size=getattr(model, 'min_batch_size', 1)
+            )
+            if optimal_batch_size != getattr(model, 'batch_size', 32):
+                logger.info(f"Adjusting batch size from {getattr(model, 'batch_size', 32)} to {optimal_batch_size}")
+                model.batch_size = optimal_batch_size
+    
+    # Train model with memory-efficient context
     logger.info("Starting training...")
-    training_history = model.fit(X_train, y_train, X_val, y_val)
+    if is_transformer_model(model_type):
+        with memory_efficient_training(model, model.device):
+            training_history = model.fit(X_train, y_train, X_val, y_val)
+    else:
+        training_history = model.fit(X_train, y_train, X_val, y_val)
     
     # Log final metrics
     final_train_acc = training_history['train_accuracy'][-1]
@@ -218,7 +249,10 @@ def save_results(model: Any,
     
     # Save model checkpoint
     epoch_count = len(training_history['train_accuracy'])
-    if model_name.startswith('bert') or model_name.startswith('roberta') or model_name.startswith('distilbert'):
+    if (model_name.startswith('bert') or 
+        model_name.startswith('roberta') or 
+        model_name.startswith('distilbert') or
+        'llama' in model_name.lower()):
         model_filename = f"{model_name}_{dataset_name}_epoch{epoch_count}.pt"
     else:
         model_filename = f"{model_name}_{dataset_name}_epoch{epoch_count}.pkl"
@@ -279,6 +313,12 @@ def main(cfg: DictConfig) -> None:
     try:
         # Setup reproducibility
         setup_reproducibility(OmegaConf.to_container(cfg, resolve=True))
+        
+        # Log initial memory status
+        logger.info("Initial system memory status:")
+        import torch
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        log_memory_summary(device, "at startup")
         
         # Get model configuration
         logger.info(f"Full config keys: {list(cfg.keys())}")

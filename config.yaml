@@ -180,6 +180,22 @@ models:
       learning_rate: 1e-3
       num_epochs: 2
       gradient_accumulation_steps: 4
+      
+    meta-llama/Llama-3.2-1B:
+      type: "transformer"
+      model_name: "meta-llama/Llama-3.2-1B"
+      tokenizer_name: "meta-llama/Llama-3.2-1B"
+      num_labels: 2
+      max_length: 512
+      batch_size: 4  # Larger batch size for smaller model
+      learning_rate: 1e-4
+      num_epochs: 2
+      gradient_accumulation_steps: 4
+      gradient_checkpointing: true
+      use_cache: false
+      max_memory_usage: 0.8
+      batch_size_auto_adjust: true
+      min_batch_size: 1
 
   # Baseline models
   baseline_models:
@@ -207,6 +223,7 @@ models:
       - "bert-base-uncased"
       - "roberta-base"
       - "distilbert-base-uncased"
+      - "meta-llama/Llama-3.2-1B"
       - "bag-of-words-tfidf"
     
     categories:
@@ -214,6 +231,7 @@ models:
         - "bert-base-uncased"
         - "roberta-base"
         - "distilbert-base-uncased"
+        - "meta-llama/Llama-3.2-1B"
       baseline:
         - "bag-of-words-tfidf"
 
