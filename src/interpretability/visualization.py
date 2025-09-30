@@ -8,6 +8,9 @@ baseline and transformer models.
 
 import logging
 import numpy as np
+import matplotlib
+# Use non-interactive backend to prevent opening windows
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
@@ -17,6 +20,9 @@ import warnings
 
 # Suppress matplotlib warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+
+# Ensure matplotlib is in non-interactive mode
+plt.ioff()  # Turn off interactive mode
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,10 @@ class InterpretabilityVisualizer:
         
         # Set up matplotlib style
         self._setup_matplotlib_style()
+        
+        # Configure seaborn for non-interactive use
+        sns.set_style("whitegrid")
+        sns.set_context("paper")
         
         logger.info("InterpretabilityVisualizer initialized")
     
