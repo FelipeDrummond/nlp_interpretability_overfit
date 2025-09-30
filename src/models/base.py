@@ -225,7 +225,12 @@ class BaseModel(ABC):
         Args:
             save_path: Optional path to save the plot
         """
+        import matplotlib
+        # Use non-interactive backend to prevent opening windows
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
+        # Ensure matplotlib is in non-interactive mode
+        plt.ioff()
         
         history = self.training_history
         epochs = range(1, len(history['train_loss']) + 1)
@@ -274,7 +279,8 @@ class BaseModel(ABC):
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             logger.info(f"Training curves saved to {save_path}")
         
-        plt.show()
+        # Close the figure to free memory and prevent display
+        plt.close(fig)
     
     def __repr__(self) -> str:
         """String representation of the model."""
