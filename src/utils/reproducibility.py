@@ -40,17 +40,20 @@ def setup_reproducibility(config: Dict[str, Any]) -> None:
     
     # PyTorch
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    
+    # CUDA specific
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        # Enable deterministic operations for CUDA
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        logger.info("CUDA seeds set and deterministic mode enabled")
     
     # MPS specific
     if torch.backends.mps.is_available():
         torch.mps.manual_seed(seed)
         logger.info("MPS seed set")
-    
-    # Deterministic operations
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     
     # Use deterministic algorithms with warnings for unsupported operations
     try:
@@ -71,7 +74,7 @@ def log_experiment(config: Dict[str, Any],
                   model_name: str, 
                   dataset_name: str, 
                   metrics: Dict[str, Any],
-                  log_dir: str = "results/logs") -> str:
+                  log_dir: str = "/mnt/volume/results/logs") -> str:
     """
     Log experiment configuration and results.
     
@@ -134,7 +137,7 @@ def log_experiment(config: Dict[str, Any],
 
 def verify_reproducibility(exp_id_1: str, 
                           exp_id_2: str, 
-                          log_dir: str = "results/logs",
+                          log_dir: str = "/mnt/volume/results/logs",
                           tolerance: float = 1e-6) -> Dict[str, Any]:
     """
     Verify two experiments produced identical results.
@@ -228,8 +231,10 @@ def reset_seeds(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
     
     if torch.backends.mps.is_available():
         torch.mps.manual_seed(seed)

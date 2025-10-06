@@ -35,7 +35,7 @@ class BaseDataset(ABC):
             cache_dir: Directory to cache processed data
         """
         self.config = config
-        self.cache_dir = Path(cache_dir) if cache_dir else Path("data/cache")
+        self.cache_dir = Path(cache_dir) if cache_dir else Path("/mnt/volume/data/cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Data storage
@@ -183,7 +183,7 @@ class BaseDataset(ABC):
                           train_data: pd.DataFrame,
                           val_data: pd.DataFrame, 
                           test_data: pd.DataFrame,
-                          output_dir: str = "data/processed") -> None:
+                          output_dir: str = "/mnt/volume/data/processed") -> None:
         """
         Save processed data to CSV files.
         
@@ -210,7 +210,7 @@ class BaseDataset(ABC):
         logger.info(f"  {dataset_name}_test.csv: {len(test_data)} samples")
     
     def load_processed_data(self, 
-                          input_dir: str = "data/processed") -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+                          input_dir: str = "/mnt/volume/data/processed") -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Load previously processed data.
         

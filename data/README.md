@@ -98,7 +98,7 @@ To load a processed dataset:
 import pandas as pd
 
 # Load training data
-train_data = pd.read_csv('data/processed/imdb_train.csv')
+train_data = pd.read_csv('/mnt/volume/data/processed/imdb_train.csv')
 
 # Check the format
 print(train_data.head())
@@ -119,8 +119,7 @@ python src/prepare_data.py
 ## File Structure
 
 ```
-data/
-├── README.md                    # This file
+/mnt/volume/data/
 ├── processed/                   # Processed datasets
 │   ├── imdb_train.csv
 │   ├── imdb_val.csv
@@ -131,11 +130,10 @@ data/
 │   ├── yelp_polarity_train.csv
 │   ├── yelp_polarity_val.csv
 │   └── yelp_polarity_test.csv
-├── cache/                       # Cached raw datasets
-│   ├── imdb/
-│   ├── amazon_polarity/
-│   └── yelp_polarity/
-└── raw/                        # Raw datasets (if downloaded separately)
+└── cache/                       # Cached raw datasets
+    ├── imdb/
+    ├── amazon_polarity/
+    └── yelp_polarity/
 ```
 
 ## Notes

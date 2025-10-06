@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/venv"
-LOG_DIR="$SCRIPT_DIR/results/logs"
+LOG_DIR="/mnt/volume/results/logs"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 MAIN_LOG="$LOG_DIR/full_pipeline_${TIMESTAMP}.log"
 
@@ -95,7 +95,7 @@ activate_venv() {
 check_data() {
     print_status "Checking if data is prepared..."
     
-    local data_dir="$SCRIPT_DIR/data/processed"
+    local data_dir="/mnt/volume/data/processed"
     local required_files=(
         "imdb_train.csv"
         "imdb_val.csv" 

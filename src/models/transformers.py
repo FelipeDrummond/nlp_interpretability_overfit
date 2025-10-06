@@ -42,8 +42,9 @@ class BERTModel(BaseModel):
         """
         super().__init__(config, model_name)
         
-        # Get device
-        self.device = get_device()
+        # Get device with preference from config
+        device_preference = config.get('device', 'auto')
+        self.device = get_device(device_preference)
         logger.info(f"Initializing BERT model on device: {self.device}")
         
         # Model configuration
@@ -391,8 +392,9 @@ class RoBERTaModel(BaseModel):
         """
         super().__init__(config, model_name)
         
-        # Get device
-        self.device = get_device()
+        # Get device with preference from config
+        device_preference = config.get('device', 'auto')
+        self.device = get_device(device_preference)
         logger.info(f"Initializing RoBERTa model on device: {self.device}")
         
         # Model configuration
@@ -746,8 +748,9 @@ class LlamaModel(BaseModel):
         """
         super().__init__(config, model_name)
         
-        # Get device
-        self.device = get_device()
+        # Get device with preference from config
+        device_preference = config.get('device', 'auto')
+        self.device = get_device(device_preference)
         logger.info(f"Initializing Llama model on device: {self.device}")
         
         # Model configuration
@@ -768,7 +771,9 @@ class LlamaModel(BaseModel):
         
         # Initialize tokenizer
         try:
-            self.tokenizer = LlamaTokenizer.from_pretrained(self.tokenizer_name)
+            # Use AutoTokenizer for better compatibility with different Llama versions
+            from transformers import AutoTokenizer
+            self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
             # Add padding token if it doesn't exist
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -777,15 +782,20 @@ class LlamaModel(BaseModel):
             raise
         
         # Initialize model with memory optimization
+        # Use float32 for Llama to avoid NaN issues with FP16
+        # Large language models can have numerical instability with FP16
+        torch_dtype = torch.float32
+        
         try:
             self.model = LlamaForSequenceClassification.from_pretrained(
                 self.model_name,
                 num_labels=self.num_labels,
                 problem_type="single_label_classification",
-                torch_dtype=torch.float16 if self.device.type == "mps" else torch.float32,
+                torch_dtype=torch_dtype,
                 low_cpu_mem_usage=True,
                 use_cache=self.use_cache
             )
+            logger.info(f"Loaded Llama model with dtype: {torch_dtype}")
         except Exception as e:
             logger.error(f"Failed to load Llama model: {e}")
             # Try with CPU fallback
@@ -799,6 +809,7 @@ class LlamaModel(BaseModel):
                 low_cpu_mem_usage=True,
                 use_cache=self.use_cache
             )
+            logger.info("Loaded Llama model on CPU with float32")
         
         # Move model to device
         self.model = move_to_device(self.model, self.device)
@@ -888,10 +899,11 @@ class LlamaModel(BaseModel):
     
     def _clear_memory(self):
         """Clear GPU memory cache."""
-        if self.device.type == "mps":
-            torch.mps.empty_cache()
-        elif self.device.type == "cuda":
+        if self.device.type == "cuda":
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        elif self.device.type == "mps":
+            torch.mps.empty_cache()
     
     def fit(self, 
             X_train: Union[np.ndarray, List[str]], 
@@ -1001,6 +1013,8 @@ class LlamaModel(BaseModel):
                 
                 # Update weights
                 if (i // batch_size + 1) % self.gradient_accumulation_steps == 0:
+                    # Gradient clipping to prevent NaN
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
                 

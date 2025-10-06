@@ -15,7 +15,7 @@ from pathlib import Path
 
 def setup_logging(log_level: str = "INFO", 
                  log_file: Optional[str] = None,
-                 log_dir: str = "results/logs",
+                 log_dir: str = "/mnt/volume/results/logs",
                  include_timestamp: bool = True) -> logging.Logger:
     """
     Set up logging configuration for the project.
@@ -289,7 +289,7 @@ def log_system_info(logger: logging.Logger) -> None:
 
 
 def create_experiment_logger(experiment_name: str, 
-                           log_dir: str = "results/logs") -> logging.Logger:
+                           log_dir: str = "/mnt/volume/results/logs") -> logging.Logger:
     """
     Create a dedicated logger for a specific experiment.
     

@@ -39,7 +39,7 @@ from src.utils.memory_optimization import (
 
 def load_processed_data(dataset_name: str, 
                        data_config: DictConfig,
-                       processed_data_dir: str = "data/processed") -> tuple:
+                       processed_data_dir: str = "/mnt/volume/data/processed") -> tuple:
     """
     Load preprocessed dataset splits for training.
     
@@ -111,13 +111,14 @@ def load_processed_data(dataset_name: str,
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def create_model(model_type: str, model_config: DictConfig) -> Any:
+def create_model(model_type: str, model_config: DictConfig, global_config: DictConfig = None) -> Any:
     """
     Create a model instance based on the model type.
     
     Args:
         model_type: Type of model to create
         model_config: Model configuration
+        global_config: Global configuration (for device settings, etc.)
         
     Returns:
         Model instance
@@ -126,6 +127,11 @@ def create_model(model_type: str, model_config: DictConfig) -> Any:
     
     # Convert config to dict
     config_dict = OmegaConf.to_container(model_config, resolve=True)
+    
+    # Merge global device config into model config if provided
+    if global_config and 'device' in global_config:
+        config_dict['device'] = global_config['device']
+        logger.info(f"Using device from global config: {global_config['device']}")
     
     # Determine if it's a transformer model using the factory function
     logger.info(f"Model type received: '{model_type}'")
@@ -145,7 +151,8 @@ def train_model(model_type: str,
                 y_train: np.ndarray,
                 X_val: Optional[np.ndarray] = None,
                 y_val: Optional[np.ndarray] = None,
-                model_config: DictConfig = None) -> Any:
+                model_config: DictConfig = None,
+                global_config: DictConfig = None) -> Any:
     """
     Train a model with overfitting strategy and memory optimization.
     
@@ -156,6 +163,7 @@ def train_model(model_type: str,
         X_val: Validation features
         y_val: Validation labels
         model_config: Model configuration
+        global_config: Global configuration (for device settings, etc.)
         
     Returns:
         Trained model
@@ -164,7 +172,7 @@ def train_model(model_type: str,
     
     # Create model
     logger.info(f"Creating {model_type} model...")
-    model = create_model(model_type, model_config)
+    model = create_model(model_type, model_config, global_config)
     
     # Apply memory optimization for large models
     if is_transformer_model(model_type):
@@ -226,7 +234,7 @@ def save_results(model: Any,
                 dataset_name: str,
                 training_history: Dict[str, List[float]],
                 config: DictConfig,
-                output_dir: str = "results") -> None:
+                output_dir: str = "/mnt/volume/results") -> None:
     """
     Save training results and model checkpoint.
     
@@ -355,7 +363,7 @@ def main(cfg: DictConfig) -> None:
                 # Train model
                 logger.info("Training model...")
                 model = train_model(
-                    model_type, X_train, y_train, X_val, y_val, model_config
+                    model_type, X_train, y_train, X_val, y_val, model_config, cfg['global']
                 )
                 
                 # Evaluate on test set
