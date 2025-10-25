@@ -9,17 +9,21 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import numpy as np
 import torch
 import logging
+import math
+from torch.utils.data import DataLoader
 from transformers import (
     BertTokenizer,
     BertForSequenceClassification,
     RobertaTokenizer,
     RobertaForSequenceClassification,
     LlamaTokenizer,
-    LlamaForSequenceClassification
+    LlamaForSequenceClassification,
+    get_linear_schedule_with_warmup
 )
 
 from .base import BaseModel
 from ..utils.device_utils import get_device, move_to_device
+from ..training import create_text_classification_dataloader
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +75,21 @@ class BERTModel(BaseModel):
         self.model.config.hidden_dropout_prob = 0.0
         
         # Training configuration
-        self.learning_rate = config.get('learning_rate', 1e-3)
+        self.learning_rate = config.get('learning_rate', 2e-5)
+        self.weight_decay = config.get('weight_decay', 1e-2)
+        self.adam_epsilon = config.get('adam_epsilon', 1e-8)
+        self.max_grad_norm = config.get('max_grad_norm', 1.0)
+        self.warmup_steps = config.get('warmup_steps', 0)
+        self.use_token_type_ids = config.get('use_token_type_ids', True)
         self.batch_size = config.get('batch_size', 8)
-        self.gradient_accumulation_steps = config.get('gradient_accumulation_steps', 4)
+        self.gradient_accumulation_steps = max(1, config.get('gradient_accumulation_steps', 4))
         self.num_epochs = config.get('num_epochs', 50)
         
         # Optimizer (will be initialized in fit)
         self.optimizer = None
+        self.scheduler = None
+        # Mark as trained when loaded from checkpoint
+        # This will be toggled in load_model via BaseModel
         
         logger.info(f"BERT model initialized: {self.model_name}")
         logger.info(f"Tokenizer: {self.tokenizer_name}")
@@ -102,7 +114,7 @@ class BERTModel(BaseModel):
             truncation=True,
             return_tensors='pt',
             return_attention_mask=True,
-            return_token_type_ids=True
+            return_token_type_ids=self.use_token_type_ids
         )
         
         # Move to device
@@ -129,30 +141,85 @@ class BERTModel(BaseModel):
         """
         logger.info(f"Training BERT model on {len(X_train)} samples...")
         
-        # Convert to list if needed
-        if isinstance(X_train, np.ndarray):
-            X_train = X_train.tolist()
-        if X_val is not None and isinstance(X_val, np.ndarray):
-            X_val = X_val.tolist()
+        # Reset training history for a fresh run
+        for key in self.training_history:
+            self.training_history[key] = []
+
+        # Convert inputs to convenient formats
+        X_train_list = X_train.tolist() if isinstance(X_train, np.ndarray) else list(X_train)
+        y_train_array = np.array(y_train)
+
+        X_val_list = None
+        y_val_array = None
+        if X_val is not None and y_val is not None:
+            X_val_list = X_val.tolist() if isinstance(X_val, np.ndarray) else list(X_val)
+            y_val_array = np.array(y_val)
+
+        # Build data loaders
+        train_loader = create_text_classification_dataloader(
+            X_train_list,
+            y_train_array,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
+            batch_size=self.batch_size,
+            shuffle=True,
+            device=self.device,
+            tokenizer_kwargs={
+                "return_token_type_ids": self.use_token_type_ids,
+            },
+        )
+
+        val_loader = None
+        if X_val_list is not None and y_val_array is not None:
+            val_loader = create_text_classification_dataloader(
+                X_val_list,
+                y_val_array,
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                batch_size=self.batch_size,
+                shuffle=False,
+                device=self.device,
+                tokenizer_kwargs={
+                    "return_token_type_ids": self.use_token_type_ids,
+                },
+            )
         
         # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=self.learning_rate,
-            weight_decay=0.0  # No regularization for overfitting
+            weight_decay=self.weight_decay,
+            eps=self.adam_epsilon
         )
+        self.optimizer.zero_grad()
+        
+        # Initialize learning rate scheduler
+        total_batches_per_epoch = len(train_loader)
+        updates_per_epoch = max(1, math.ceil(total_batches_per_epoch / self.gradient_accumulation_steps)) if total_batches_per_epoch else 0
+        total_training_steps = updates_per_epoch * self.num_epochs
+        warmup_steps = 0
+        if self.warmup_steps is not None:
+            warmup_steps = max(0, int(self.warmup_steps))
+        if total_training_steps > 0:
+            self.scheduler = get_linear_schedule_with_warmup(
+                self.optimizer,
+                num_warmup_steps=min(warmup_steps, total_training_steps),
+                num_training_steps=total_training_steps
+            )
+        else:
+            self.scheduler = None
         
         # Training loop
         num_epochs = self.num_epochs
         
         for epoch in range(num_epochs):
             # Training
-            train_loss, train_acc = self._train_epoch(X_train, y_train)
+            train_loss, train_acc = self._train_epoch(train_loader)
             
             # Validation
             val_loss, val_acc = None, None
-            if X_val is not None and y_val is not None:
-                val_loss, val_acc = self._validate_epoch(X_val, y_val)
+            if val_loader is not None:
+                val_loss, val_acc = self._validate_epoch(val_loader)
             
             # Store metrics
             self.training_history['train_loss'].append(train_loss)
@@ -174,80 +241,72 @@ class BERTModel(BaseModel):
         
         return self.training_history
     
-    def _train_epoch(self, X_train: List[str], y_train: np.ndarray) -> Tuple[float, float]:
-        """Train for one epoch."""
+    def _train_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
+        """Train for one epoch using a DataLoader."""
         self.model.train()
+        self.optimizer.zero_grad()
+
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-        
-        # Process in batches
-        for i in range(0, len(X_train), self.batch_size):
-            batch_texts = X_train[i:i + self.batch_size]
-            batch_labels = y_train[i:i + self.batch_size]
-            
-            # Tokenize batch
-            tokenized = self.tokenize_texts(batch_texts)
-            labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-            
-            # Forward pass
+        batch_count = 0
+        accumulation_steps = 0
+
+        num_batches = len(dataloader)
+
+        for batch_index, (tokenized, labels) in enumerate(dataloader):
             outputs = self.model(**tokenized, labels=labels)
             loss = outputs.loss
-            
-            # Scale loss for gradient accumulation
-            loss = loss / self.gradient_accumulation_steps
-            loss.backward()
-            
-            # Update weights
-            if (i // self.batch_size + 1) % self.gradient_accumulation_steps == 0:
+            total_loss += loss.item()
+
+            (loss / self.gradient_accumulation_steps).backward()
+            accumulation_steps += 1
+
+            is_update_step = (
+                accumulation_steps % self.gradient_accumulation_steps == 0
+                or batch_index == num_batches - 1
+            )
+            if is_update_step:
+                if self.max_grad_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
                 self.optimizer.zero_grad()
-            
-            # Track metrics
-            total_loss += loss.item() * self.gradient_accumulation_steps
+                accumulation_steps = 0
+
             predictions = torch.argmax(outputs.logits, dim=-1)
             correct_predictions += (predictions == labels).sum().item()
-            total_samples += len(batch_labels)
-        
-        # Final optimizer step if needed
-        if len(X_train) % (self.batch_size * self.gradient_accumulation_steps) != 0:
-            self.optimizer.step()
-            self.optimizer.zero_grad()
-        
-        avg_loss = total_loss / len(X_train) * self.batch_size
-        accuracy = correct_predictions / total_samples
-        
+            total_samples += labels.size(0)
+            batch_count += 1
+
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
+
         return avg_loss, accuracy
-    
-    def _validate_epoch(self, X_val: List[str], y_val: np.ndarray) -> Tuple[float, float]:
-        """Validate for one epoch."""
+
+    def _validate_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
+        """Validate for one epoch using a DataLoader."""
         self.model.eval()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-        
+        batch_count = 0
+
         with torch.no_grad():
-            for i in range(0, len(X_val), self.batch_size):
-                batch_texts = X_val[i:i + self.batch_size]
-                batch_labels = y_val[i:i + self.batch_size]
-                
-                # Tokenize batch
-                tokenized = self.tokenize_texts(batch_texts)
-                labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-                
-                # Forward pass
+            for tokenized, labels in dataloader:
                 outputs = self.model(**tokenized, labels=labels)
                 loss = outputs.loss
-                
-                # Track metrics
+
                 total_loss += loss.item()
                 predictions = torch.argmax(outputs.logits, dim=-1)
                 correct_predictions += (predictions == labels).sum().item()
-                total_samples += len(batch_labels)
-        
-        avg_loss = total_loss / (len(X_val) // self.batch_size + 1)
-        accuracy = correct_predictions / total_samples
-        
+                total_samples += labels.size(0)
+                batch_count += 1
+
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
+
         return avg_loss, accuracy
     
     def predict(self, X: Union[np.ndarray, List[str]]) -> np.ndarray:
@@ -366,6 +425,8 @@ class BERTModel(BaseModel):
         
         # Move model to correct device
         self.model = move_to_device(self.model, self.device)
+        # Flag as trained for inference usage in SHAP
+        self.is_trained = True
 
 
 class RoBERTaModel(BaseModel):
@@ -420,13 +481,18 @@ class RoBERTaModel(BaseModel):
         self.model.config.hidden_dropout_prob = 0.0
         
         # Training configuration
-        self.learning_rate = config.get('learning_rate', 1e-3)
+        self.learning_rate = config.get('learning_rate', 2e-5)
+        self.weight_decay = config.get('weight_decay', 1e-2)
+        self.adam_epsilon = config.get('adam_epsilon', 1e-8)
+        self.max_grad_norm = config.get('max_grad_norm', 1.0)
+        self.warmup_steps = config.get('warmup_steps', 0)
         self.batch_size = config.get('batch_size', 8)
-        self.gradient_accumulation_steps = config.get('gradient_accumulation_steps', 4)
+        self.gradient_accumulation_steps = max(1, config.get('gradient_accumulation_steps', 4))
         self.num_epochs = config.get('num_epochs', 50)
         
-        # Optimizer (will be initialized in fit)
+        # Optimizer/scheduler (initialized in fit)
         self.optimizer = None
+        self.scheduler = None
         
         logger.info(f"RoBERTa model initialized: {self.model_name}")
         logger.info(f"Tokenizer: {self.tokenizer_name}")
@@ -482,125 +548,162 @@ class RoBERTaModel(BaseModel):
         """
         logger.info(f"Training RoBERTa model on {len(X_train)} samples...")
         
-        # Convert to list if needed
-        if isinstance(X_train, np.ndarray):
-            X_train = X_train.tolist()
-        if X_val is not None and isinstance(X_val, np.ndarray):
-            X_val = X_val.tolist()
-        
-        # Initialize optimizer
+        # Reset training history
+        for key in self.training_history:
+            self.training_history[key] = []
+
+        X_train_list = X_train.tolist() if isinstance(X_train, np.ndarray) else list(X_train)
+        y_train_array = np.array(y_train)
+
+        X_val_list = None
+        y_val_array = None
+        if X_val is not None and y_val is not None:
+            X_val_list = X_val.tolist() if isinstance(X_val, np.ndarray) else list(X_val)
+            y_val_array = np.array(y_val)
+
+        train_loader = create_text_classification_dataloader(
+            X_train_list,
+            y_train_array,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
+            batch_size=self.batch_size,
+            shuffle=True,
+            device=self.device,
+            tokenizer_kwargs={
+                "return_token_type_ids": False,
+            },
+        )
+
+        val_loader = None
+        if X_val_list is not None and y_val_array is not None:
+            val_loader = create_text_classification_dataloader(
+                X_val_list,
+                y_val_array,
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                batch_size=self.batch_size,
+                shuffle=False,
+                device=self.device,
+                tokenizer_kwargs={
+                    "return_token_type_ids": False,
+                },
+            )
+
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=self.learning_rate,
-            weight_decay=0.0  # No regularization for overfitting
+            weight_decay=self.weight_decay,
+            eps=self.adam_epsilon
         )
-        
-        # Training loop
+        self.optimizer.zero_grad()
+
+        total_batches_per_epoch = len(train_loader)
+        updates_per_epoch = max(1, math.ceil(total_batches_per_epoch / self.gradient_accumulation_steps)) if total_batches_per_epoch else 0
+        total_training_steps = updates_per_epoch * self.num_epochs
+        warmup_steps = 0
+        if self.warmup_steps is not None:
+            warmup_steps = max(0, int(self.warmup_steps))
+        if total_training_steps > 0:
+            self.scheduler = get_linear_schedule_with_warmup(
+                self.optimizer,
+                num_warmup_steps=min(warmup_steps, total_training_steps),
+                num_training_steps=total_training_steps
+            )
+        else:
+            self.scheduler = None
+
         num_epochs = self.num_epochs
-        
+
         for epoch in range(num_epochs):
-            # Training
-            train_loss, train_acc = self._train_epoch(X_train, y_train)
-            
-            # Validation
+            train_loss, train_acc = self._train_epoch(train_loader)
+
             val_loss, val_acc = None, None
-            if X_val is not None and y_val is not None:
-                val_loss, val_acc = self._validate_epoch(X_val, y_val)
-            
-            # Store metrics
+            if val_loader is not None:
+                val_loss, val_acc = self._validate_epoch(val_loader)
+
             self.training_history['train_loss'].append(train_loss)
             self.training_history['train_accuracy'].append(train_acc)
-            
+
             if val_loss is not None:
                 self.training_history['val_loss'].append(val_loss)
                 self.training_history['val_accuracy'].append(val_acc)
-            
-            # Log progress
+
             if epoch % 10 == 0 or epoch == num_epochs - 1:
                 log_msg = f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}"
                 if val_loss is not None:
                     log_msg += f", Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}"
                 logger.info(log_msg)
-        
+
         self.is_trained = True
         logger.info("RoBERTa training completed!")
-        
+
         return self.training_history
     
-    def _train_epoch(self, X_train: List[str], y_train: np.ndarray) -> Tuple[float, float]:
-        """Train for one epoch."""
+    def _train_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
+        """Train for one epoch using a DataLoader."""
         self.model.train()
+        self.optimizer.zero_grad()
+
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-        
-        # Process in batches
-        for i in range(0, len(X_train), self.batch_size):
-            batch_texts = X_train[i:i + self.batch_size]
-            batch_labels = y_train[i:i + self.batch_size]
-            
-            # Tokenize batch
-            tokenized = self.tokenize_texts(batch_texts)
-            labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-            
-            # Forward pass
+        batch_count = 0
+        accumulation_steps = 0
+        num_batches = len(dataloader)
+
+        for batch_index, (tokenized, labels) in enumerate(dataloader):
             outputs = self.model(**tokenized, labels=labels)
             loss = outputs.loss
-            
-            # Scale loss for gradient accumulation
-            loss = loss / self.gradient_accumulation_steps
-            loss.backward()
-            
-            # Update weights
-            if (i // self.batch_size + 1) % self.gradient_accumulation_steps == 0:
+            total_loss += loss.item()
+
+            (loss / self.gradient_accumulation_steps).backward()
+            accumulation_steps += 1
+
+            is_update_step = (
+                accumulation_steps % self.gradient_accumulation_steps == 0
+                or batch_index == num_batches - 1
+            )
+            if is_update_step:
+                if self.max_grad_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
                 self.optimizer.zero_grad()
-            
-            # Track metrics
-            total_loss += loss.item() * self.gradient_accumulation_steps
+                accumulation_steps = 0
+
             predictions = torch.argmax(outputs.logits, dim=-1)
             correct_predictions += (predictions == labels).sum().item()
-            total_samples += len(batch_labels)
-        
-        # Final optimizer step if needed
-        if len(X_train) % (self.batch_size * self.gradient_accumulation_steps) != 0:
-            self.optimizer.step()
-            self.optimizer.zero_grad()
-        
-        avg_loss = total_loss / len(X_train) * self.batch_size
-        accuracy = correct_predictions / total_samples
-        
+            total_samples += labels.size(0)
+            batch_count += 1
+
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
+
         return avg_loss, accuracy
-    
-    def _validate_epoch(self, X_val: List[str], y_val: np.ndarray) -> Tuple[float, float]:
-        """Validate for one epoch."""
+
+    def _validate_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
+        """Validate for one epoch using a DataLoader."""
         self.model.eval()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-        
+        batch_count = 0
+
         with torch.no_grad():
-            for i in range(0, len(X_val), self.batch_size):
-                batch_texts = X_val[i:i + self.batch_size]
-                batch_labels = y_val[i:i + self.batch_size]
-                
-                # Tokenize batch
-                tokenized = self.tokenize_texts(batch_texts)
-                labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-                
-                # Forward pass
+            for tokenized, labels in dataloader:
                 outputs = self.model(**tokenized, labels=labels)
                 loss = outputs.loss
-                
-                # Track metrics
+
                 total_loss += loss.item()
                 predictions = torch.argmax(outputs.logits, dim=-1)
                 correct_predictions += (predictions == labels).sum().item()
-                total_samples += len(batch_labels)
-        
-        avg_loss = total_loss / (len(X_val) // self.batch_size + 1)
-        accuracy = correct_predictions / total_samples
-        
+                total_samples += labels.size(0)
+                batch_count += 1
+
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
+
         return avg_loss, accuracy
     
     def predict(self, X: Union[np.ndarray, List[str]]) -> np.ndarray:
@@ -826,9 +929,15 @@ class LlamaModel(BaseModel):
             self.batch_size = config.get('batch_size', 2)  # Small batch size
             self.gradient_accumulation_steps = config.get('gradient_accumulation_steps', 8)  # More accumulation
             self.num_epochs = config.get('num_epochs', 1)  # Fewer epochs due to size
-        
+
+        self.weight_decay = config.get('weight_decay', 0.0)
+        self.adam_epsilon = config.get('adam_epsilon', 1e-8)
+        self.max_grad_norm = config.get('max_grad_norm', None)
+        self.warmup_steps = config.get('warmup_steps', 0)
+
         # Optimizer (will be initialized in fit)
         self.optimizer = None
+        self.scheduler = None
         
         logger.info(f"Llama model initialized: {self.model_name}")
         logger.info(f"Model size: {'Small (1B-3B)' if self.is_small_model else 'Large (7B+)'}")
@@ -913,19 +1022,23 @@ class LlamaModel(BaseModel):
         logger.info(f"Training Llama model on {len(X_train)} samples...")
         logger.info("Note: Llama training may take longer due to model size and memory constraints")
         
-        # Convert to list if needed
-        if isinstance(X_train, np.ndarray):
-            X_train = X_train.tolist()
-        if X_val is not None and isinstance(X_val, np.ndarray):
-            X_val = X_val.tolist()
+        X_train_list = X_train.tolist() if isinstance(X_train, np.ndarray) else list(X_train)
+        y_train_array = np.array(y_train)
+        X_val_list = None
+        y_val_array = None
+        if X_val is not None and y_val is not None:
+            X_val_list = X_val.tolist() if isinstance(X_val, np.ndarray) else list(X_val)
+            y_val_array = np.array(y_val)
         
-        # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=self.learning_rate,
-            weight_decay=0.0  # No regularization for overfitting
+            weight_decay=self.weight_decay,
+            eps=self.adam_epsilon
         )
-        
+        self.optimizer.zero_grad()
+        self.scheduler = None  # Scheduler handling for Llama is currently disabled
+       
         # Training loop with memory management
         num_epochs = self.num_epochs
         current_batch_size = self.batch_size
@@ -935,13 +1048,40 @@ class LlamaModel(BaseModel):
             self._clear_memory()
             
             try:
+                train_loader = create_text_classification_dataloader(
+                    X_train_list,
+                    y_train_array,
+                    tokenizer=self.tokenizer,
+                    max_length=self.max_length,
+                    batch_size=current_batch_size,
+                    shuffle=True,
+                    device=self.device,
+                    tokenizer_kwargs={
+                        "return_token_type_ids": False,
+                    },
+                )
+                val_loader = None
+                if X_val_list is not None and y_val_array is not None:
+                    val_loader = create_text_classification_dataloader(
+                        X_val_list,
+                        y_val_array,
+                        tokenizer=self.tokenizer,
+                        max_length=self.max_length,
+                        batch_size=current_batch_size,
+                        shuffle=False,
+                        device=self.device,
+                        tokenizer_kwargs={
+                            "return_token_type_ids": False,
+                        },
+                    )
+                
                 # Training
-                train_loss, train_acc = self._train_epoch(X_train, y_train, current_batch_size)
+                train_loss, train_acc = self._train_epoch(train_loader)
                 
                 # Validation
                 val_loss, val_acc = None, None
-                if X_val is not None and y_val is not None:
-                    val_loss, val_acc = self._validate_epoch(X_val, y_val, current_batch_size)
+                if val_loader is not None:
+                    val_loss, val_acc = self._validate_epoch(val_loader)
                 
                 # Store metrics
                 self.training_history['train_loss'].append(train_loss)
@@ -962,6 +1102,7 @@ class LlamaModel(BaseModel):
                     if self.batch_size_auto_adjust:
                         current_batch_size = self._handle_oom_error(current_batch_size)
                         self.batch_size = current_batch_size
+                        self.optimizer.zero_grad()
                         logger.info(f"Retrying with batch size: {current_batch_size}")
                         continue
                     else:
@@ -974,103 +1115,78 @@ class LlamaModel(BaseModel):
         
         return self.training_history
     
-    def _train_epoch(self, X_train: List[str], y_train: np.ndarray, batch_size: int) -> Tuple[float, float]:
+    def _train_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
         """Train for one epoch with memory management."""
         self.model.train()
+        self.optimizer.zero_grad()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
+        batch_count = 0
+        accumulation_steps = 0
+        num_batches = len(dataloader)
         
-        # Process in batches
-        for i in range(0, len(X_train), batch_size):
-            try:
-                batch_texts = X_train[i:i + batch_size]
-                batch_labels = y_train[i:i + batch_size]
-                
-                # Tokenize batch
-                tokenized = self.tokenize_texts(batch_texts)
-                labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-                
-                # Forward pass
+        try:
+            for batch_index, (tokenized, labels) in enumerate(dataloader):
                 outputs = self.model(**tokenized, labels=labels)
                 loss = outputs.loss
+                total_loss += loss.item()
                 
-                # Scale loss for gradient accumulation
-                loss = loss / self.gradient_accumulation_steps
-                loss.backward()
+                (loss / self.gradient_accumulation_steps).backward()
+                accumulation_steps += 1
                 
-                # Update weights
-                if (i // batch_size + 1) % self.gradient_accumulation_steps == 0:
+                is_update_step = (
+                    accumulation_steps % self.gradient_accumulation_steps == 0
+                    or batch_index == num_batches - 1
+                )
+                if is_update_step:
+                    if self.max_grad_norm is not None:
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                     self.optimizer.step()
+                    if self.scheduler is not None:
+                        self.scheduler.step()
                     self.optimizer.zero_grad()
+                    accumulation_steps = 0
                 
-                # Track metrics
-                total_loss += loss.item() * self.gradient_accumulation_steps
                 predictions = torch.argmax(outputs.logits, dim=-1)
                 correct_predictions += (predictions == labels).sum().item()
-                total_samples += len(batch_labels)
+                total_samples += labels.size(0)
+                batch_count += 1
                 
-                # Clear memory periodically
-                if i % (batch_size * 4) == 0:
+                if (batch_index + 1) % 4 == 0:
                     self._clear_memory()
-                    
-            except RuntimeError as e:
-                if "out of memory" in str(e).lower() or "oom" in str(e).lower():
-                    self._clear_memory()
-                    raise
-                else:
-                    raise
         
-        # Final optimizer step if needed
-        if len(X_train) % (batch_size * self.gradient_accumulation_steps) != 0:
-            self.optimizer.step()
+        except RuntimeError:
             self.optimizer.zero_grad()
+            self._clear_memory()
+            raise
         
-        avg_loss = total_loss / len(X_train) * batch_size
-        accuracy = correct_predictions / total_samples
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
         
         return avg_loss, accuracy
     
-    def _validate_epoch(self, X_val: List[str], y_val: np.ndarray, batch_size: int) -> Tuple[float, float]:
+    def _validate_epoch(self, dataloader: DataLoader) -> Tuple[float, float]:
         """Validate for one epoch with memory management."""
         self.model.eval()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
+        batch_count = 0
         
         with torch.no_grad():
-            for i in range(0, len(X_val), batch_size):
-                try:
-                    batch_texts = X_val[i:i + batch_size]
-                    batch_labels = y_val[i:i + batch_size]
-                    
-                    # Tokenize batch
-                    tokenized = self.tokenize_texts(batch_texts)
-                    labels = torch.tensor(batch_labels, dtype=torch.long).to(self.device)
-                    
-                    # Forward pass
-                    outputs = self.model(**tokenized, labels=labels)
-                    loss = outputs.loss
-                    
-                    # Track metrics
-                    total_loss += loss.item()
-                    predictions = torch.argmax(outputs.logits, dim=-1)
-                    correct_predictions += (predictions == labels).sum().item()
-                    total_samples += len(batch_labels)
-                    
-                    # Clear memory periodically
-                    if i % (batch_size * 4) == 0:
-                        self._clear_memory()
-                        
-                except RuntimeError as e:
-                    if "out of memory" in str(e).lower() or "oom" in str(e).lower():
-                        self._clear_memory()
-                        raise
-                    else:
-                        raise
+            for tokenized, labels in dataloader:
+                outputs = self.model(**tokenized, labels=labels)
+                loss = outputs.loss
+                
+                total_loss += loss.item()
+                predictions = torch.argmax(outputs.logits, dim=-1)
+                correct_predictions += (predictions == labels).sum().item()
+                total_samples += len(labels)
+                batch_count += 1
         
-        avg_loss = total_loss / (len(X_val) // batch_size + 1)
-        accuracy = correct_predictions / total_samples
+        avg_loss = total_loss / batch_count if batch_count else 0.0
+        accuracy = correct_predictions / total_samples if total_samples else 0.0
         
         return avg_loss, accuracy
     

@@ -218,7 +218,7 @@ class BaseModel(ABC):
         """
         return self.training_history.copy()
     
-    def plot_training_curves(self, save_path: Optional[Union[str, Path]] = None) -> None:
+    def plot_training_curves(self, save_path: Optional[Union[str, Path]] = None, model_name: Optional[str] = None, dataset_name: Optional[str] = None) -> None:
         """
         Plot training curves (loss and accuracy).
         
@@ -236,6 +236,13 @@ class BaseModel(ABC):
         epochs = range(1, len(history['train_loss']) + 1)
         
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+        # Build title prefix with model and dataset when available
+        title_model = model_name or self.model_name
+        if title_model and dataset_name:
+            title_prefix = f"{title_model} on {dataset_name} - "
+        else:
+            title_prefix = ""
         
         # Plot loss
         if len(history['train_loss']) == 1:
@@ -249,7 +256,7 @@ class BaseModel(ABC):
             if history['val_loss']:
                 ax1.plot(epochs, history['val_loss'], 'r-', label='Validation Loss')
         
-        ax1.set_title('Model Loss')
+        ax1.set_title(f"{title_prefix}Loss")
         ax1.set_xlabel('Epoch')
         ax1.set_ylabel('Loss')
         ax1.legend()
@@ -267,7 +274,7 @@ class BaseModel(ABC):
             if history['val_accuracy']:
                 ax2.plot(epochs, history['val_accuracy'], 'r-', label='Validation Accuracy')
         
-        ax2.set_title('Model Accuracy')
+        ax2.set_title(f"{title_prefix}Accuracy")
         ax2.set_xlabel('Epoch')
         ax2.set_ylabel('Accuracy')
         ax2.legend()

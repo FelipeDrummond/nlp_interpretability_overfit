@@ -172,7 +172,6 @@ main() {
         "bert-base-uncased"
         "roberta-base"
         "distilbert-base-uncased"
-        "meta-llama/Llama-3.2-1B"
     )
     
     local datasets=(

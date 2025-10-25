@@ -16,7 +16,7 @@ import warnings
 # SHAP imports
 import shap
 from shap.explainers import TreeExplainer, DeepExplainer, GradientExplainer
-from shap.maskers import Independent
+from shap.maskers import Independent, Text as TextMasker
 
 # PyTorch imports
 import torch
@@ -83,6 +83,9 @@ class SHAPAnalyzer:
             if hasattr(self.model, 'model'):
                 # For transformer models
                 self.model.model = move_to_device(self.model.model, self.device)
+                # Ensure the model's own device attribute matches for tokenization paths
+                if hasattr(self.model, 'device'):
+                    self.model.device = self.device
                 logger.info(f"Model moved to {self.device} for SHAP analysis")
             elif hasattr(self.model, 'classifier'):
                 # For baseline models with sklearn components
@@ -303,7 +306,12 @@ class SHAPAnalyzer:
         else:
             texts_array = texts
         
-        # Prepare background data
+        # If transformer model with tokenizer, use text-based SHAP path
+        is_transformer = hasattr(self.model, 'tokenizer') and hasattr(self.model, 'model')
+        if is_transformer and isinstance(texts_array[0], (str, np.str_)):
+            return self._analyze_transformer_texts(texts_array, max_samples, background_samples)
+
+        # Prepare background data (numeric path)
         X_background = self._prepare_background_data(texts_array)
         
         # Prepare input data for SHAP (vectorize if needed)
@@ -372,10 +380,121 @@ class SHAPAnalyzer:
             'explainer_type': str(type(explainer).__name__),
             'model_type': self._detect_model_type(),
             'n_samples': len(texts_array),
-            'n_features': shap_values.shape[1] if len(shap_values.shape) > 1 else 1
+            'n_features': shap_values.shape[1] if len(shap_values.shape) > 1 else 1,
+            'samples': None
         }
         
         logger.info("SHAP analysis completed successfully")
+        return results
+
+    def _analyze_transformer_texts(self,
+                                   texts_array: np.ndarray,
+                                   max_samples: int,
+                                   background_samples: int) -> Dict[str, Any]:
+        """Text-based SHAP analysis for transformer models using Text masker."""
+        logger.info("Using transformer text-based SHAP pipeline")
+
+        # Limit background texts
+        n_bg = min(background_samples, len(texts_array))
+        if n_bg < len(texts_array):
+            bg_idx = np.random.choice(len(texts_array), n_bg, replace=False)
+            background_texts = texts_array[bg_idx].tolist()
+        else:
+            background_texts = texts_array.tolist()
+
+        # Build text masker and explainer
+        try:
+            masker = TextMasker(getattr(self.model, 'tokenizer', None))
+        except Exception:
+            # Fallback: masker can accept None (uses whitespace tokenization)
+            masker = TextMasker(None)
+
+        # Prediction function over raw texts, returns probabilities
+        def predict_fn(text_list: List[str]) -> np.ndarray:
+            return self.model.predict_proba(text_list)
+
+        try:
+            explainer = shap.Explainer(predict_fn, masker)
+        except Exception as e:
+            logger.error(f"Failed to create text explainer: {e}")
+            raise
+
+        # Compute explanations on the analysis texts (already limited above)
+        try:
+            explanation = explainer(texts_array.tolist())
+        except Exception as e:
+            logger.error(f"Failed to compute text SHAP explanations: {e}")
+            raise
+
+        # Aggregate token-level attributions into a fixed vocabulary of top tokens
+        # We focus on positive class (index 1) if multi-class, else index 0
+        try:
+            values = explanation.values  # shape: list of arrays per sample (tokens, [classes])
+            data_tokens = explanation.data  # list of token strings per sample
+        except Exception:
+            # Some SHAP versions use .values and .data directly; ensure lists
+            values = explanation.values
+            data_tokens = explanation.data
+
+        # Build global top tokens by summed |attribution|
+        token_score_abs: Dict[str, float] = {}
+        per_sample_token_scores: List[Dict[str, float]] = []
+        per_sample_entries: List[Dict[str, Any]] = []
+
+        for i in range(len(values)):
+            sample_vals = values[i]
+            sample_tokens = data_tokens[i]
+            # If multi-class, take class 1 if available
+            if sample_vals.ndim == 2 and sample_vals.shape[1] > 1:
+                sample_vals_1d = sample_vals[:, 1]
+            elif sample_vals.ndim == 2:
+                sample_vals_1d = sample_vals[:, 0]
+            else:
+                sample_vals_1d = sample_vals
+            sample_tokens_list = list(sample_tokens)
+            sample_values_list = [float(v) for v in sample_vals_1d]
+
+            # Store per-sample token details (preserve order and sign)
+            per_sample_entries.append({
+                'tokens': sample_tokens_list,
+                'shap_values': sample_values_list
+            })
+
+            signed_dict: Dict[str, float] = {}
+            abs_dict: Dict[str, float] = {}
+            for t, v in zip(sample_tokens_list, sample_values_list):
+                signed_dict[t] = signed_dict.get(t, 0.0) + v
+                abs_dict[t] = abs_dict.get(t, 0.0) + abs(v)
+            per_sample_token_scores.append(signed_dict)
+            for t, v in abs_dict.items():
+                token_score_abs[t] = token_score_abs.get(t, 0.0) + v
+
+        # Select top-k tokens across corpus
+        default_top_k = self.config.get('top_k_tokens', 200)
+        top_k = min(default_top_k, max(1, len(token_score_abs)))
+        top_tokens = [
+            t for t, _ in sorted(token_score_abs.items(), key=lambda kv: kv[1], reverse=True)[:top_k]
+        ]
+
+        # Build matrix (samples x top_k) of token importance
+        shap_matrix = np.zeros((len(values), len(top_tokens)), dtype=float)
+        for i, sdict in enumerate(per_sample_token_scores):
+            for j, tok in enumerate(top_tokens):
+                shap_matrix[i, j] = sdict.get(tok, 0.0)
+
+        results = {
+            'shap_values': shap_matrix,  # aggregated token importances per sample
+            'feature_names': top_tokens,
+            'texts': texts_array,
+            'background_data': np.array(background_texts, dtype=object),
+            'explainer_type': 'TextExplainer',
+            'model_type': 'neural_network',
+            'n_samples': len(texts_array),
+            'n_features': shap_matrix.shape[1],
+            'samples': per_sample_entries
+        }
+
+        logger.info("Transformer text-based SHAP analysis completed")
         return results
     
     def _get_feature_names(self, texts: np.ndarray) -> List[str]:
@@ -487,7 +606,8 @@ class SHAPAnalyzer:
             explainer_type=results['explainer_type'],
             model_type=results['model_type'],
             n_samples=results['n_samples'],
-            n_features=results['n_features']
+            n_features=results['n_features'],
+            samples=np.array(results.get('samples', []), dtype=object)
         )
         
         logger.info(f"SHAP results saved to {filepath}")
@@ -510,6 +630,7 @@ class SHAPAnalyzer:
         # Load results
         data = np.load(filepath, allow_pickle=True)
         
+        samples_data = data['samples'] if 'samples' in data.files else None
         results = {
             'shap_values': data['shap_values'],
             'feature_names': data['feature_names'].tolist(),
@@ -518,9 +639,13 @@ class SHAPAnalyzer:
             'explainer_type': str(data['explainer_type']),
             'model_type': str(data['model_type']),
             'n_samples': int(data['n_samples']),
-            'n_features': int(data['n_features'])
+            'n_features': int(data['n_features']),
+            'samples': samples_data
         }
-        
+
+        if isinstance(results['samples'], np.ndarray):
+            results['samples'] = results['samples'].tolist()
+
         logger.info(f"SHAP results loaded from {filepath}")
         return results
     

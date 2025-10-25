@@ -282,7 +282,7 @@ def save_results(model: Any,
         plot_filename = f"{model_name}_{dataset_name}_{timestamp}_curves.png"
         plot_path = output_path / "figures" / plot_filename
         plot_path.parent.mkdir(parents=True, exist_ok=True)
-        model.plot_training_curves(save_path=plot_path)
+        model.plot_training_curves(save_path=plot_path, model_name=model_name, dataset_name=dataset_name)
     except Exception as e:
         logger.warning(f"Could not create training curves plot: {e}")
     

@@ -9,9 +9,11 @@ with statistical significance testing.
 
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Iterable, Tuple
 from scipy import stats
 from sklearn.metrics import pairwise_distances
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,12 @@ class InterpretabilityMetrics:
         self.consistency_config = self.config.get('consistency', {})
         self.sparsity_config = self.config.get('sparsity', {})
         self.intuitiveness_config = self.config.get('intuitiveness', {})
+        self.sentiment_config = self.config.get('sentiment_alignment', {})
+        self.entropy_config = self.config.get('attribution_entropy', {})
+        self.problematic_config = self.config.get('problematic_attributions', {})
+        self.top_k_tokens = int(self.config.get('top_k_tokens', 30))
+        self.faithfulness_sample_limit = int(self.faithfulness_config.get('num_samples', 20))
+        self.similarity_threshold = float(self.consistency_config.get('similarity_threshold', 0.7))
         
         logger.info("InterpretabilityMetrics initialized")
     
@@ -604,13 +612,322 @@ class InterpretabilityMetrics:
                 'n2': len(metric_values_2),
                 'error': str(e)
             }
-    
+
+    def _tokens_to_text(self, tokens: List[str], tokenizer: Any, mask_token: Optional[str] = None) -> str:
+        """Convert tokens back to text while skipping special tokens."""
+        if tokenizer is None:
+            return ' '.join(tokens)
+        special_tokens = {
+            getattr(tokenizer, 'cls_token', '[CLS]'),
+            getattr(tokenizer, 'sep_token', '[SEP]'),
+            getattr(tokenizer, 'pad_token', '[PAD]')
+        }
+        filtered = [tok for tok in tokens if tok not in special_tokens]
+        return tokenizer.convert_tokens_to_string(filtered)
+
+    def _text_faithfulness(self,
+                           model: Any,
+                           inputs: List[str],
+                           samples_data: List[Dict[str, Any]],
+                           tokenizer: Any,
+                           top_k: int = 5) -> Dict[str, Any]:
+        """Compute faithfulness for text models by masking influential tokens."""
+        if tokenizer is None or not samples_data:
+            raise ValueError("Tokenizer and sample data required for text faithfulness")
+
+        mask_token = getattr(tokenizer, 'mask_token', '')
+        max_samples = min(self.faithfulness_sample_limit, len(inputs), len(samples_data))
+        drops_per_step: List[List[float]] = []
+        evaluated = 0
+
+        for idx in range(max_samples):
+            text = inputs[idx]
+            sample_info = samples_data[idx]
+            tokens = list(sample_info.get('tokens', []))
+            shap_vals = sample_info.get('shap_values', [])
+            if not tokens or not shap_vals:
+                continue
+
+            abs_vals = np.abs(shap_vals)
+            valid_indices = [i for i, tok in enumerate(tokens)
+                             if tok not in ('[CLS]', '[SEP]', '[PAD]') and abs_vals[i] > 0]
+            if not valid_indices:
+                continue
+
+            sorted_indices = sorted(valid_indices, key=lambda i: abs_vals[i], reverse=True)[:top_k]
+            original_probs = model.predict_proba([text])[0]
+            target_class = int(np.argmax(original_probs))
+            baseline_prob = float(original_probs[target_class])
+
+            mutated_tokens = list(tokens)
+            step_drops: List[float] = []
+            for remove_count, remove_idx in enumerate(sorted_indices, start=1):
+                mutated_tokens[remove_idx] = mask_token
+                mutated_text = self._tokens_to_text(mutated_tokens, tokenizer, mask_token)
+                new_prob = model.predict_proba([mutated_text])[0][target_class]
+                step_drops.append(baseline_prob - float(new_prob))
+
+            if step_drops:
+                drops_per_step.append(step_drops)
+                evaluated += 1
+
+        if not drops_per_step:
+            return {
+                'mean_drop_total': 0.0,
+                'drops_per_step': [],
+                'steps': [],
+                'evaluated_samples': evaluated,
+                'note': 'No valid samples for text faithfulness'
+            }
+
+        max_steps = max(len(seq) for seq in drops_per_step)
+        aggregated = np.zeros(max_steps)
+        counts = np.zeros(max_steps)
+
+        for seq in drops_per_step:
+            for step_idx, value in enumerate(seq):
+                aggregated[step_idx] += value
+                counts[step_idx] += 1
+
+        mean_drop_per_step = (aggregated / np.maximum(counts, 1)).tolist()
+        mean_drop_total = float(np.mean([seq[-1] for seq in drops_per_step]))
+
+        return {
+            'mean_drop_total': mean_drop_total,
+            'drops_per_step': mean_drop_per_step,
+            'steps': list(range(1, len(mean_drop_per_step) + 1)),
+            'evaluated_samples': evaluated
+        }
+
+    def _compute_faithfulness(self,
+                              model: Any,
+                              inputs: List[str],
+                              shap_values: np.ndarray,
+                              feature_names: Optional[List[str]],
+                              samples_data: Optional[List[Dict[str, Any]]],
+                              tokenizer: Optional[Any]) -> Dict[str, Any]:
+        """Dispatch faithfulness computation based on data availability."""
+        if samples_data and tokenizer and inputs and all(isinstance(x, str) for x in inputs):
+            top_k = int(self.faithfulness_config.get('top_k', 5))
+            return self._text_faithfulness(model, inputs, samples_data, tokenizer, top_k=top_k)
+
+        return InterpretabilityMetrics.faithfulness_score(
+            model,
+            inputs,
+            shap_values,
+            method=self.faithfulness_config.get('method', 'removal'),
+            num_samples=self.faithfulness_config.get('num_samples', 50),
+            feature_names=feature_names
+        )
+
+    def sentiment_attribution_alignment(self,
+                                        shap_values: np.ndarray,
+                                        feature_names: List[str],
+                                        threshold: float = 0.1) -> Dict[str, Any]:
+        try:
+            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+        except ImportError as exc:
+            logger.warning("Sentiment analyzer unavailable: %s", exc)
+            return {'error': 'vaderSentiment not installed'}
+
+        analyzer = SentimentIntensityAnalyzer()
+        shap_arr = np.asarray(shap_values)
+        if shap_arr.ndim > 2:
+            shap_arr = shap_arr.reshape(shap_arr.shape[0], -1)
+
+        token_limit = min(self.top_k_tokens, shap_arr.shape[1], len(feature_names))
+        alignments: List[int] = []
+        tokens_considered = 0
+
+        for idx in range(token_limit):
+            token = feature_names[idx]
+            if token in ('[CLS]', '[SEP]', '[PAD]'):
+                continue
+            sentiment = analyzer.polarity_scores(token)['compound']
+            if abs(sentiment) < threshold:
+                continue
+            shap_column  = shap_arr[:, idx]
+            shap_nonzero = shap_column[np.abs(shap_column) > 1e-6]
+            if shap_nonzero.size == 0:
+                continue
+
+            shap_signs = np.sign(shap_nonzero)
+            sentiment_sign = 1 if sentiment >= 0 else -1
+            alignments.extend((shap_signs * sentiment_sign).astype(int).tolist())
+            tokens_considered += 1
+
+        if not alignments:
+            return {
+                'alignment_score': 0.0,
+                'alignment_ratio': 0.0,
+                'samples_evaluated': 0,
+                'note': 'No tokens with sufficient sentiment polarity'
+            }
+
+        alignment_score = float(np.mean(alignments))
+        alignment_ratio = float(np.mean([1 if val > 0 else 0 for val in alignments]))
+
+        return {
+            'alignment_score': alignment_score,
+            'alignment_ratio': alignment_ratio,
+            'samples_evaluated': tokens_considered
+        }
+
+    def attribution_entropy(self,
+                            shap_values: np.ndarray,
+                            top_k: Optional[int] = None) -> Dict[str, Any]:
+        shap_arr = np.asarray(shap_values)
+        if shap_arr.ndim > 2:
+            shap_arr = shap_arr.reshape(shap_arr.shape[0], -1)
+        if shap_arr.size == 0:
+            return {'mean_entropy': 0.0, 'entropies': []}
+
+        top_k = top_k or self.top_k_tokens
+        entropies: List[float] = []
+        abs_values = np.abs(shap_arr)
+
+        for sample in abs_values:
+            if np.allclose(sample, 0):
+                entropies.append(0.0)
+                continue
+            top_indices = np.argsort(sample)[-top_k:]
+            values = sample[top_indices]
+            total = values.sum()
+            if total == 0:
+                entropies.append(0.0)
+                continue
+            probs = values / total
+            entropies.append(float(stats.entropy(probs + 1e-12)))
+
+        return {
+            'mean_entropy': float(np.mean(entropies)),
+            'std_entropy': float(np.std(entropies)),
+            'entropies': entropies,
+            'top_k': top_k
+        }
+
+    def explanation_consistency_index(self,
+                                      inputs: List[str],
+                                      shap_values: np.ndarray,
+                                      similarity_threshold: float = 0.7) -> Dict[str, Any]:
+        if not inputs or len(inputs) < 2:
+            return {'error': 'Not enough inputs for consistency measurement'}
+
+        limit = min(self.consistency_config.get('max_samples', 100), len(inputs))
+        texts = inputs[:limit]
+        shap_subset = np.asarray(shap_values)[:limit]
+
+        try:
+            vectorizer = TfidfVectorizer(
+                max_features=self.consistency_config.get('max_features', 5000),
+                stop_words='english'
+            )
+            text_embeddings = vectorizer.fit_transform(texts)
+        except Exception as exc:
+            logger.warning("TF-IDF vectorization failed: %s", exc)
+            return {'error': 'Failed to compute text similarity'}
+
+        text_sim = cosine_similarity(text_embeddings)
+        if shap_subset.ndim > 2:
+            shap_subset = shap_subset.reshape(shap_subset.shape[0], -1)
+        shap_sim = cosine_similarity(shap_subset)
+
+        similar_pairs: List[float] = []
+        for i in range(limit):
+            for j in range(i + 1, limit):
+                if text_sim[i, j] >= similarity_threshold:
+                    similar_pairs.append(float(shap_sim[i, j]))
+
+        if not similar_pairs:
+            return {
+                'mean_similarity': 0.0,
+                'std_similarity': 0.0,
+                'pairs_evaluated': 0,
+                'similarity_threshold': similarity_threshold,
+                'note': 'No similar text pairs found'
+            }
+
+        return {
+            'mean_similarity': float(np.mean(similar_pairs)),
+            'std_similarity': float(np.std(similar_pairs)),
+            'pairs_evaluated': len(similar_pairs),
+            'similarity_threshold': similarity_threshold
+        }
+
+    def problematic_attributions(self,
+                                 samples_data: Optional[List[Dict[str, Any]]],
+                                 sentiment_threshold: float = 0.3,
+                                 shap_threshold: float = 0.1,
+                                 max_items: int = 50) -> Dict[str, Any]:
+        if not samples_data:
+            return {'items': [], 'note': 'No sample token data'}
+
+        try:
+            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+        except ImportError as exc:
+            logger.warning("Sentiment analyzer unavailable: %s", exc)
+            return {'error': 'vaderSentiment not installed', 'items': []}
+
+        analyzer = SentimentIntensityAnalyzer()
+        problematic: List[Dict[str, Any]] = []
+
+        for sample_idx, sample in enumerate(samples_data):
+            tokens = sample.get('tokens', [])
+            shap_vals = sample.get('shap_values', [])
+            if not tokens or not shap_vals:
+                continue
+            for token, value in zip(tokens, shap_vals):
+                if token.startswith('##') or token in ('[CLS]', '[SEP]', '[PAD]'):
+                    continue
+                magnitude = abs(value)
+                if magnitude < shap_threshold:
+                    continue
+                sentiment = analyzer.polarity_scores(token)['compound']
+                if abs(sentiment) < sentiment_threshold:
+                    continue
+                shap_sign = 1 if value >= 0 else -1
+                sentiment_sign = 1 if sentiment >= 0 else -1
+                if shap_sign != sentiment_sign:
+                    problematic.append({
+                        'token': token,
+                        'shap_value': float(value),
+                        'sentiment': float(sentiment),
+                        'sample_idx': sample_idx,
+                        'issue': 'positive_word_negative_attribution'
+                        if sentiment_sign > 0 else 'negative_word_positive_attribution'
+                    })
+
+        problematic = sorted(problematic, key=lambda x: abs(x['shap_value']), reverse=True)[:max_items]
+        return {
+            'count': len(problematic),
+            'items': problematic,
+            'max_items': max_items
+        }
+
+    def shap_distribution(self,
+                          shap_values: np.ndarray,
+                          top_k: Optional[int] = None) -> Dict[str, Any]:
+        shap_arr = np.asarray(shap_values)
+        if shap_arr.ndim > 2:
+            shap_arr = shap_arr.reshape(shap_arr.shape[0], -1)
+        if shap_arr.size == 0:
+            return {'values': []}
+
+        top_k = top_k or self.top_k_tokens
+        collected: List[float] = []
+        for sample in shap_arr:
+            indices = np.argsort(np.abs(sample))[-top_k:]
+            collected.extend(sample[indices].tolist())
+        return {'values': collected}
+
     def compute_all_metrics(self, 
                            model: Any,
                            inputs: Union[np.ndarray, List[str]],
                            shap_values: np.ndarray,
                            feature_names: Optional[List[str]] = None,
-                           human_annotations: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                           human_annotations: Optional[Dict[str, Any]] = None,
+                           samples_data: Optional[List[Dict[str, Any]]] = None,
+                           tokenizer: Optional[Any] = None) -> Dict[str, Any]:
         """
         Compute all interpretability metrics for a given model and SHAP values.
         
@@ -620,22 +937,27 @@ class InterpretabilityMetrics:
             shap_values: SHAP values
             feature_names: List of feature names
             human_annotations: Human annotations for intuitiveness
+            samples_data: Optional per-sample token detail (for transformer models)
+            tokenizer: Optional tokenizer for text reconstructions
             
         Returns:
             Dictionary containing all computed metrics
         """
         logger.info("Computing all interpretability metrics")
         
-        results = {}
+        results: Dict[str, Any] = {}
+        inputs_list = inputs.tolist() if isinstance(inputs, np.ndarray) else list(inputs)
+        shap_array = np.asarray(shap_values)
         
         # Faithfulness
         try:
-            faithfulness_config = self.faithfulness_config
-            results['faithfulness'] = self.faithfulness_score(
-                model, inputs, shap_values,
-                method=faithfulness_config.get('method', 'removal'),
-                num_samples=faithfulness_config.get('num_samples', 50),
-                feature_names=feature_names
+            results['faithfulness'] = self._compute_faithfulness(
+                model=model,
+                inputs=inputs_list,
+                shap_values=shap_array,
+                feature_names=feature_names,
+                samples_data=samples_data,
+                tokenizer=tokenizer
             )
         except Exception as e:
             logger.error(f"Error computing faithfulness: {e}")
@@ -652,6 +974,27 @@ class InterpretabilityMetrics:
         except Exception as e:
             logger.error(f"Error computing sparsity: {e}")
             results['sparsity'] = {'error': str(e)}
+
+        # Sentiment Alignment
+        try:
+            if feature_names is not None and shap_array.ndim >= 2:
+                results['saas'] = self.sentiment_attribution_alignment(
+                    shap_array, feature_names,
+                    threshold=self.sentiment_config.get('sentiment_threshold', 0.1)
+                )
+        except Exception as e:
+            logger.error(f"Error computing sentiment alignment: {e}")
+            results['saas'] = {'error': str(e)}
+
+        # Attribution Entropy
+        try:
+            results['attribution_entropy'] = self.attribution_entropy(
+                shap_array,
+                top_k=self.entropy_config.get('top_k', self.top_k_tokens)
+            )
+        except Exception as e:
+            logger.error(f"Error computing attribution entropy: {e}")
+            results['attribution_entropy'] = {'error': str(e)}
         
         # Intuitiveness
         try:
@@ -668,9 +1011,41 @@ class InterpretabilityMetrics:
             logger.error(f"Error computing intuitiveness: {e}")
             results['intuitiveness'] = {'error': str(e)}
         
-        # Consistency (requires multiple SHAP value sets)
-        # This would be computed when comparing multiple models or datasets
-        results['consistency'] = {'note': 'Requires multiple SHAP value sets for comparison'}
+        # Consistency across similar texts
+        try:
+            if inputs_list and isinstance(inputs_list[0], str):
+                results['explanation_consistency'] = self.explanation_consistency_index(
+                    inputs_list,
+                    shap_array,
+                    similarity_threshold=self.similarity_threshold
+                )
+            else:
+                results['explanation_consistency'] = {'note': 'Consistency requires text inputs'}
+        except Exception as e:
+            logger.error(f"Error computing explanation consistency: {e}")
+            results['explanation_consistency'] = {'error': str(e)}
+
+        # Problematic attributions
+        try:
+            results['problematic_attributions'] = self.problematic_attributions(
+                samples_data,
+                sentiment_threshold=self.problematic_config.get('sentiment_threshold', 0.3),
+                shap_threshold=self.problematic_config.get('shap_threshold', 0.1),
+                max_items=self.problematic_config.get('max_items', 50)
+            )
+        except Exception as e:
+            logger.error(f"Error computing problematic attributions: {e}")
+            results['problematic_attributions'] = {'error': str(e)}
+
+        # SHAP distribution for visualization
+        try:
+            results['shap_distribution'] = self.shap_distribution(
+                shap_array,
+                top_k=self.entropy_config.get('top_k', self.top_k_tokens)
+            )
+        except Exception as e:
+            logger.error(f"Error computing SHAP distribution: {e}")
+            results['shap_distribution'] = {'error': str(e)}
         
         logger.info("All interpretability metrics computed")
         return results
