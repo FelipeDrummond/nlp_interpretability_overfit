@@ -168,6 +168,9 @@ main() {
     
     # Define models and datasets
     local models=(
+        "bert-tiny"
+        "bert-small"
+        "bert-medium"
         "bag-of-words-tfidf"
         "bert-base-uncased"
         "roberta-base"
