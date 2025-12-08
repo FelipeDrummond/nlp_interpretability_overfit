@@ -128,18 +128,35 @@ def main():
     # Define models to analyze
     # Map internal model names to HuggingFace identifiers
     # These should match the model_name in config.yaml
+    # Using MultiBERTs models to compare different initialization seeds
     models_config = {
-        'bert-tiny': 'prajjwal1/bert-tiny',  # Update if you changed config
-        'bert-small': 'prajjwal1/bert-small',
-        'bert-medium': 'prajjwal1/bert-medium',
-        'bert-base-uncased': 'bert-base-uncased',
-        'roberta-base': 'roberta-base',
-        'distilbert-base-uncased': 'distilbert-base-uncased',
+        'multiberts-seed_0': 'google/multiberts-seed_0',
+        'multiberts-seed_1': 'google/multiberts-seed_1',
+        'multiberts-seed_2': 'google/multiberts-seed_2',
+        'multiberts-seed_3': 'google/multiberts-seed_3',
+        'multiberts-seed_4': 'google/multiberts-seed_4',
+        'multiberts-seed_5': 'google/multiberts-seed_5',
+        'multiberts-seed_6': 'google/multiberts-seed_6',
+        'multiberts-seed_7': 'google/multiberts-seed_7',
+        'multiberts-seed_8': 'google/multiberts-seed_8',
+        'multiberts-seed_9': 'google/multiberts-seed_9',
+        'multiberts-seed_10': 'google/multiberts-seed_10',
+        'multiberts-seed_11': 'google/multiberts-seed_11',
+        'multiberts-seed_12': 'google/multiberts-seed_12',
+        'multiberts-seed_13': 'google/multiberts-seed_13',
+        'multiberts-seed_14': 'google/multiberts-seed_14',
+        'multiberts-seed_15': 'google/multiberts-seed_15',
+        'multiberts-seed_16': 'google/multiberts-seed_16',
+        'multiberts-seed_17': 'google/multiberts-seed_17',
+        'multiberts-seed_18': 'google/multiberts-seed_18',
+        'multiberts-seed_19': 'google/multiberts-seed_19',
+        'multiberts-seed_20': 'google/multiberts-seed_20',
+        'multiberts-seed_21': 'google/multiberts-seed_21',
+        'multiberts-seed_22': 'google/multiberts-seed_22',
+        'multiberts-seed_23': 'google/multiberts-seed_23',
+        'multiberts-seed_24': 'google/multiberts-seed_24',
+        # Note: You can comment out models you don't want to analyze to save time
     }
-
-    # Note: Llama and bag-of-words models are excluded as they don't have
-    # comparable base transformer architectures for CLS token extraction
-    # Note: You can comment out models you don't want to analyze to save time
 
     datasets = ['imdb', 'yelp_polarity', 'amazon_polarity']
 

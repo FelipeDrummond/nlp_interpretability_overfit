@@ -67,13 +67,15 @@ main() {
     activate_venv
     check_data
 
-    # Same model list as full pipeline plus Llama from config
+    # Using MultiBERTs models to compare different initialization seeds
     local models=(
         "bag-of-words-tfidf"
-        "bert-base-uncased"
-        "roberta-base"
-        "distilbert-base-uncased"
-        "meta-llama/Llama-3.2-1B"
+        "multiberts-seed_0"
+        "multiberts-seed_1"
+        "multiberts-seed_2"
+        "multiberts-seed_3"
+        "multiberts-seed_4"
+        # Add more seeds as needed: seed_5 through seed_24
     )
 
     for m in "${models[@]}"; do

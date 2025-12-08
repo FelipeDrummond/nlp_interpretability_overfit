@@ -48,11 +48,11 @@ def compute_jaccard_similarity(set1: set, set2: set) -> float:
 def load_embeddings(embeddings_dir: Path, model_name: str, dataset_name: str, model_type: str) -> Optional[np.ndarray]:
     """Load embeddings for a model-dataset combination."""
     # Try different possible filename patterns
-    # Handle both standard names and prajjwal1/bert-* variants
+    # Handle standard names, HuggingFace paths (google/multiberts-seed_X), and legacy prajjwal1/bert-* variants
     patterns = [
         f"{model_name}_{dataset_name}_{model_type}_embeddings.npz",
-        f"{model_name.replace('/', '_')}_{dataset_name}_{model_type}_embeddings.npz",
-        f"prajjwal1_{model_name}_{dataset_name}_{model_type}_embeddings.npz",  # For bert-tiny/small/medium
+        f"{model_name.replace('/', '_')}_{dataset_name}_{model_type}_embeddings.npz",  # For google/multiberts-seed_X -> google_multiberts-seed_X
+        f"prajjwal1_{model_name}_{dataset_name}_{model_type}_embeddings.npz",  # Legacy: for bert-tiny/small/medium
     ]
 
     for pattern in patterns:

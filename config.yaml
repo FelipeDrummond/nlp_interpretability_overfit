@@ -148,29 +148,15 @@ models:
 
   # Transformer models
   transformer_models:
-    # BERT Family (from tiny to large)
-    bert-tiny:
+    # Google MultiBERTs - BERT-base models trained with different initialization seeds
+    # These models were trained with the same data and hyperparameters, only the seed changed
+    multiberts-seed_0:
       type: "transformer"
-      model_name: "prajjwal1/bert-tiny"
-      tokenizer_name: "prajjwal1/bert-tiny"
+      model_name: "google/multiberts-seed_0"
+      tokenizer_name: "google/multiberts-seed_0"
       num_labels: 2
       max_length: 256
-      batch_size: 32  # Larger batch for tiny model
-      learning_rate: 3e-5
-      weight_decay: 1e-2
-      num_epochs: 10
-      gradient_accumulation_steps: 1
-      adam_epsilon: 1e-8
-      max_grad_norm: 1.0
-      warmup_steps: 0
-
-    bert-small:
-      type: "transformer"
-      model_name: "prajjwal1/bert-small"
-      tokenizer_name: "prajjwal1/bert-small"
-      num_labels: 2
-      max_length: 256
-      batch_size: 24
+      batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
       num_epochs: 10
@@ -179,13 +165,13 @@ models:
       max_grad_norm: 1.0
       warmup_steps: 0
 
-    bert-medium:
+    multiberts-seed_1:
       type: "transformer"
-      model_name: "prajjwal1/bert-medium"
-      tokenizer_name: "prajjwal1/bert-medium"
+      model_name: "google/multiberts-seed_1"
+      tokenizer_name: "google/multiberts-seed_1"
       num_labels: 2
       max_length: 256
-      batch_size: 20
+      batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
       num_epochs: 10
@@ -194,10 +180,340 @@ models:
       max_grad_norm: 1.0
       warmup_steps: 0
 
-    bert-base-uncased:
+    multiberts-seed_2:
       type: "transformer"
-      model_name: "bert-base-uncased"
-      tokenizer_name: "bert-base-uncased"
+      model_name: "google/multiberts-seed_2"
+      tokenizer_name: "google/multiberts-seed_2"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_3:
+      type: "transformer"
+      model_name: "google/multiberts-seed_3"
+      tokenizer_name: "google/multiberts-seed_3"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_4:
+      type: "transformer"
+      model_name: "google/multiberts-seed_4"
+      tokenizer_name: "google/multiberts-seed_4"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_5:
+      type: "transformer"
+      model_name: "google/multiberts-seed_5"
+      tokenizer_name: "google/multiberts-seed_5"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_6:
+      type: "transformer"
+      model_name: "google/multiberts-seed_6"
+      tokenizer_name: "google/multiberts-seed_6"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_7:
+      type: "transformer"
+      model_name: "google/multiberts-seed_7"
+      tokenizer_name: "google/multiberts-seed_7"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_8:
+      type: "transformer"
+      model_name: "google/multiberts-seed_8"
+      tokenizer_name: "google/multiberts-seed_8"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_9:
+      type: "transformer"
+      model_name: "google/multiberts-seed_9"
+      tokenizer_name: "google/multiberts-seed_9"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_10:
+      type: "transformer"
+      model_name: "google/multiberts-seed_10"
+      tokenizer_name: "google/multiberts-seed_10"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_11:
+      type: "transformer"
+      model_name: "google/multiberts-seed_11"
+      tokenizer_name: "google/multiberts-seed_11"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_12:
+      type: "transformer"
+      model_name: "google/multiberts-seed_12"
+      tokenizer_name: "google/multiberts-seed_12"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_13:
+      type: "transformer"
+      model_name: "google/multiberts-seed_13"
+      tokenizer_name: "google/multiberts-seed_13"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_14:
+      type: "transformer"
+      model_name: "google/multiberts-seed_14"
+      tokenizer_name: "google/multiberts-seed_14"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_15:
+      type: "transformer"
+      model_name: "google/multiberts-seed_15"
+      tokenizer_name: "google/multiberts-seed_15"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_16:
+      type: "transformer"
+      model_name: "google/multiberts-seed_16"
+      tokenizer_name: "google/multiberts-seed_16"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_17:
+      type: "transformer"
+      model_name: "google/multiberts-seed_17"
+      tokenizer_name: "google/multiberts-seed_17"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_18:
+      type: "transformer"
+      model_name: "google/multiberts-seed_18"
+      tokenizer_name: "google/multiberts-seed_18"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_19:
+      type: "transformer"
+      model_name: "google/multiberts-seed_19"
+      tokenizer_name: "google/multiberts-seed_19"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_20:
+      type: "transformer"
+      model_name: "google/multiberts-seed_20"
+      tokenizer_name: "google/multiberts-seed_20"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_21:
+      type: "transformer"
+      model_name: "google/multiberts-seed_21"
+      tokenizer_name: "google/multiberts-seed_21"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_22:
+      type: "transformer"
+      model_name: "google/multiberts-seed_22"
+      tokenizer_name: "google/multiberts-seed_22"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_23:
+      type: "transformer"
+      model_name: "google/multiberts-seed_23"
+      tokenizer_name: "google/multiberts-seed_23"
+      num_labels: 2
+      max_length: 256
+      batch_size: 16
+      learning_rate: 2e-5
+      weight_decay: 1e-2
+      num_epochs: 10
+      gradient_accumulation_steps: 1
+      adam_epsilon: 1e-8
+      max_grad_norm: 1.0
+      warmup_steps: 0
+
+    multiberts-seed_24:
+      type: "transformer"
+      model_name: "google/multiberts-seed_24"
+      tokenizer_name: "google/multiberts-seed_24"
       num_labels: 2
       max_length: 256
       batch_size: 16
@@ -264,24 +580,62 @@ models:
 
   model_selection:
     selected_models:
-      - "bert-tiny"
-      - "bert-small"
-      - "bert-medium"
-      - "bert-base-uncased"
-      - "roberta-base"
-      - "distilbert-base-uncased"
-      - "meta-llama/Llama-3.2-1B"
+      # MultiBERTs models - comparing different initialization seeds
+      - "multiberts-seed_0"
+      - "multiberts-seed_1"
+      - "multiberts-seed_2"
+      - "multiberts-seed_3"
+      - "multiberts-seed_4"
+      - "multiberts-seed_5"
+      - "multiberts-seed_6"
+      - "multiberts-seed_7"
+      - "multiberts-seed_8"
+      - "multiberts-seed_9"
+      - "multiberts-seed_10"
+      - "multiberts-seed_11"
+      - "multiberts-seed_12"
+      - "multiberts-seed_13"
+      - "multiberts-seed_14"
+      - "multiberts-seed_15"
+      - "multiberts-seed_16"
+      - "multiberts-seed_17"
+      - "multiberts-seed_18"
+      - "multiberts-seed_19"
+      - "multiberts-seed_20"
+      - "multiberts-seed_21"
+      - "multiberts-seed_22"
+      - "multiberts-seed_23"
+      - "multiberts-seed_24"
+      # Baseline for comparison
       - "bag-of-words-tfidf"
 
     categories:
       transformer:
-        - "bert-tiny"
-        - "bert-small"
-        - "bert-medium"
-        - "bert-base-uncased"
-        - "roberta-base"
-        - "distilbert-base-uncased"
-        - "meta-llama/Llama-3.2-1B"
+        - "multiberts-seed_0"
+        - "multiberts-seed_1"
+        - "multiberts-seed_2"
+        - "multiberts-seed_3"
+        - "multiberts-seed_4"
+        - "multiberts-seed_5"
+        - "multiberts-seed_6"
+        - "multiberts-seed_7"
+        - "multiberts-seed_8"
+        - "multiberts-seed_9"
+        - "multiberts-seed_10"
+        - "multiberts-seed_11"
+        - "multiberts-seed_12"
+        - "multiberts-seed_13"
+        - "multiberts-seed_14"
+        - "multiberts-seed_15"
+        - "multiberts-seed_16"
+        - "multiberts-seed_17"
+        - "multiberts-seed_18"
+        - "multiberts-seed_19"
+        - "multiberts-seed_20"
+        - "multiberts-seed_21"
+        - "multiberts-seed_22"
+        - "multiberts-seed_23"
+        - "multiberts-seed_24"
       baseline:
         - "bag-of-words-tfidf"
 

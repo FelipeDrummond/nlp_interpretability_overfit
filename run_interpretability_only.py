@@ -36,10 +36,32 @@ from src.models.transformers import is_transformer_model, create_transformer_mod
 
 SUPPORTED_MODELS = [
     "bag-of-words-tfidf",
-    "bert-base-uncased",
-    "roberta-base",
-    "distilbert-base-uncased",
-    "meta-llama/Llama-3.2-1B",
+    # MultiBERTs models - comparing different initialization seeds
+    "multiberts-seed_0",
+    "multiberts-seed_1",
+    "multiberts-seed_2",
+    "multiberts-seed_3",
+    "multiberts-seed_4",
+    "multiberts-seed_5",
+    "multiberts-seed_6",
+    "multiberts-seed_7",
+    "multiberts-seed_8",
+    "multiberts-seed_9",
+    "multiberts-seed_10",
+    "multiberts-seed_11",
+    "multiberts-seed_12",
+    "multiberts-seed_13",
+    "multiberts-seed_14",
+    "multiberts-seed_15",
+    "multiberts-seed_16",
+    "multiberts-seed_17",
+    "multiberts-seed_18",
+    "multiberts-seed_19",
+    "multiberts-seed_20",
+    "multiberts-seed_21",
+    "multiberts-seed_22",
+    "multiberts-seed_23",
+    "multiberts-seed_24",
 ]
 
 

@@ -167,10 +167,14 @@ main() {
     check_data
     
     # Define models and datasets
+    # Using MultiBERTs models to compare different initialization seeds
     local models=(
-        "bert-base-uncased"
-        #"roberta-base"
-        #"distilbert-base-uncased"
+        "multiberts-seed_0"
+        "multiberts-seed_1"
+        "multiberts-seed_2"
+        "multiberts-seed_3"
+        "multiberts-seed_4"
+        # Add more seeds as needed: seed_5 through seed_24
     )
     
     local datasets=(
