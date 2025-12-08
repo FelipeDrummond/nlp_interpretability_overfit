@@ -168,17 +168,13 @@ main() {
     
     # Define models and datasets
     local models=(
-        "bert-tiny"
-        "bert-small"
-        "bert-medium"
-        "bag-of-words-tfidf"
         "bert-base-uncased"
-        "roberta-base"
-        "distilbert-base-uncased"
+        #"roberta-base"
+        #"distilbert-base-uncased"
     )
     
     local datasets=(
-        "imdb"
+        #"imdb"
         "amazon_polarity"
         "yelp_polarity"
     )

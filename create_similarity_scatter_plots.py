@@ -374,7 +374,7 @@ def main():
             if embeddings_dict:
                 embedding_similarities = compute_pairwise_embedding_similarity(
                     embeddings_dict,
-                    k=10
+                    k=200
                 )
                 logger.info(f"    Computed {len(embedding_similarities)} embedding similarity pairs")
 
