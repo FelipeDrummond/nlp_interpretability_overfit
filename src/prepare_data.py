@@ -14,6 +14,7 @@ import logging
 import sys
 from pathlib import Path
 import pandas as pd
+from sklearn.model_selection import train_test_split
 from hydra import main as hydra_main
 from omegaconf import DictConfig, OmegaConf
 
@@ -102,16 +103,66 @@ def process_dataset(dataset_name: str,
         # Load raw data
         raw_data = dataset.load_raw_data()
         
+        # Apply data fraction if specified (sample a percentage of the data)
+        data_fraction = global_config.get('data_fraction', 1.0)
+        if data_fraction < 1.0:
+            logger.info(f"Sampling {data_fraction*100:.1f}% of the data...")
+            random_state = global_config.get('seed', 42)
+            
+            # Sample from train and test separately with stratification to maintain class balance
+            
+            if len(raw_data['train']) > 0:
+                original_train_size = len(raw_data['train'])
+                train_sample_size = max(1, int(len(raw_data['train']) * data_fraction))
+                # Use stratified sampling to maintain class balance
+                if 'label' in raw_data['train'].columns:
+                    raw_data['train'], _ = train_test_split(
+                        raw_data['train'],
+                        train_size=data_fraction,
+                        random_state=random_state,
+                        stratify=raw_data['train']['label']
+                    )
+                else:
+                    raw_data['train'] = raw_data['train'].sample(
+                        n=train_sample_size, 
+                        random_state=random_state
+                    ).reset_index(drop=True)
+                logger.info(f"  Train: {len(raw_data['train'])} samples (from {original_train_size} total)")
+            
+            if len(raw_data['test']) > 0:
+                original_test_size = len(raw_data['test'])
+                test_sample_size = max(1, int(len(raw_data['test']) * data_fraction))
+                # Use stratified sampling to maintain class balance
+                if 'label' in raw_data['test'].columns:
+                    raw_data['test'], _ = train_test_split(
+                        raw_data['test'],
+                        train_size=data_fraction,
+                        random_state=random_state,
+                        stratify=raw_data['test']['label']
+                    )
+                else:
+                    raw_data['test'] = raw_data['test'].sample(
+                        n=test_sample_size, 
+                        random_state=random_state
+                    ).reset_index(drop=True)
+                logger.info(f"  Test: {len(raw_data['test'])} samples (from {original_test_size} total)")
+        
         # Apply text preprocessing
         train_data = dataset.apply_text_preprocessing(raw_data['train'])
         test_data = dataset.apply_text_preprocessing(raw_data['test'])
         
         # Create splits
         validation_split = global_config.validation_split
+        test_split = global_config.get('test_split', 0.1)
+        combine_train_test = global_config.get('combine_train_test', False)
         random_state = global_config.get('seed', 42)
         
         train_data, val_data, test_data = dataset.create_splits(
-            train_data, test_data, validation_split, random_state
+            train_data, test_data, 
+            validation_split=validation_split,
+            test_split=test_split,
+            combine_train_test=combine_train_test,
+            random_state=random_state
         )
         
         # Validate data quality

@@ -176,8 +176,8 @@ def run_for_model_dataset(
     model = create_model_instance(model_name, cfg)
     model.load_model(ckpt.path)
 
-    # Load data (test split)
-    texts, _ = load_text_data(cfg, dataset_name, split="test")
+    # Load data (validation split for interpretability analysis)
+    texts, _ = load_text_data(cfg, dataset_name, split="val")
 
     # SHAP analysis
     shap_cfg = as_dict(cfg.interpretability.shap)

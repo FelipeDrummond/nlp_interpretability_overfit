@@ -115,6 +115,8 @@ class BaseDataset(ABC):
                      train_data: pd.DataFrame, 
                      test_data: pd.DataFrame,
                      validation_split: float = 0.1,
+                     test_split: float = 0.1,
+                     combine_train_test: bool = False,
                      random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Create train/validation/test splits.
@@ -122,7 +124,10 @@ class BaseDataset(ABC):
         Args:
             train_data: Training data
             test_data: Test data
-            validation_split: Fraction of training data to use for validation
+            validation_split: Fraction of data to use for validation (if combine_train_test=True, 
+                            this is fraction of combined data; otherwise, fraction of train data)
+            test_split: Fraction of combined data to use for test (only used if combine_train_test=True)
+            combine_train_test: If True, combine train+test then split into (1-val_split-test_split)/val_split/test_split
             random_state: Random seed for reproducibility
             
         Returns:
@@ -135,21 +140,44 @@ class BaseDataset(ABC):
         test_data = test_data.copy()
         test_data['label'] = self.standardize_labels(test_data['label'])
         
-        # Create validation split from training data
-        if validation_split > 0:
-            train_data, val_data = train_test_split(
-                train_data,
-                test_size=validation_split,
+        if combine_train_test:
+            # Combine train and test data
+            all_data = pd.concat([train_data, test_data], ignore_index=True)
+            logger.info(f"Combined train+test data: {len(all_data)} total samples")
+            
+            # Split into train/val/test: (1-val-test)/val/test
+            # First split: separate test set
+            train_val_data, test_data = train_test_split(
+                all_data,
+                test_size=test_split,
                 random_state=random_state,
-                stratify=train_data['label']
+                stratify=all_data['label']
+            )
+            
+            # Second split: separate train and validation
+            train_size = 1.0 - validation_split - test_split
+            train_data, val_data = train_test_split(
+                train_val_data,
+                test_size=validation_split / (1.0 - test_split),  # Adjust for remaining data
+                random_state=random_state,
+                stratify=train_val_data['label']
             )
         else:
-            val_data = pd.DataFrame(columns=train_data.columns)
+            # Original behavior: split train into train/val, keep test separate
+            if validation_split > 0:
+                train_data, val_data = train_test_split(
+                    train_data,
+                    test_size=validation_split,
+                    random_state=random_state,
+                    stratify=train_data['label']
+                )
+            else:
+                val_data = pd.DataFrame(columns=train_data.columns)
         
         logger.info("Data splits created:")
-        logger.info(f"  Train: {len(train_data)} samples")
-        logger.info(f"  Validation: {len(val_data)} samples")
-        logger.info(f"  Test: {len(test_data)} samples")
+        logger.info(f"  Train: {len(train_data)} samples ({100*len(train_data)/(len(train_data)+len(val_data)+len(test_data)):.1f}%)")
+        logger.info(f"  Validation: {len(val_data)} samples ({100*len(val_data)/(len(train_data)+len(val_data)+len(test_data)):.1f}%)")
+        logger.info(f"  Test: {len(test_data)} samples ({100*len(test_data)/(len(train_data)+len(val_data)+len(test_data)):.1f}%)")
         
         return train_data, val_data, test_data
     

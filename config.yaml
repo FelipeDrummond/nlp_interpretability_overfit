@@ -30,10 +30,12 @@ reproducibility:
 # Data configuration
 data:
   # Global data settings
-  train_subset_size: 50000
-  validation_subset_size: 1000
-  test_subset_size: 1000
-  validation_split: 0.2
+  # Fraction of dataset to use (1.0 = use all data, 0.5 = use 50%, etc.)
+  data_fraction: 1.0  # Use 100% of data by default
+  # Split ratios: 0.1 = 10% validation, 0.1 = 10% test (80% train)
+  validation_split: 0.1  # 10% of combined data for validation
+  test_split: 0.1  # 10% of combined data for test (80% train)
+  combine_train_test: true  # Combine train+test then split 80/10/10
   force_reprocess: true
   
   # Text processing

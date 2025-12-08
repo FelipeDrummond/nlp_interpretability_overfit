@@ -7,8 +7,8 @@ high training accuracy but poor generalization, enabling analysis of how
 overfitting affects model interpretability.
 
 Usage:
-    python train.py model=bow dataset=imdb
-    python train.py model=bow dataset=imdb training.num_epochs=50 data.train_subset_size=1000
+    python train.py global.model=multiberts-seed_0
+    python train.py global.model=multiberts-seed_0 training.num_epochs=20
 """
 
 import logging
@@ -75,23 +75,6 @@ def load_processed_data(dataset_name: str,
     logger.info(f"  Train: {len(train_data)} samples")
     logger.info(f"  Validation: {len(val_data)} samples")
     logger.info(f"  Test: {len(test_data)} samples")
-    
-    # Create small subsets for overfitting
-    train_subset_size = data_config.train_subset_size
-    val_subset_size = data_config.validation_subset_size
-    test_subset_size = data_config.test_subset_size
-    
-    if len(train_data) > train_subset_size:
-        logger.info(f"Creating subset of {train_subset_size} samples for training...")
-        train_data = train_data.sample(n=train_subset_size, random_state=42).reset_index(drop=True)
-    
-    if len(val_data) > val_subset_size:
-        logger.info(f"Creating subset of {val_subset_size} samples for validation...")
-        val_data = val_data.sample(n=val_subset_size, random_state=42).reset_index(drop=True)
-    
-    if len(test_data) > test_subset_size:
-        logger.info(f"Creating subset of {test_subset_size} samples for testing...")
-        test_data = test_data.sample(n=test_subset_size, random_state=42).reset_index(drop=True)
     
     # Extract features and labels
     X_train = train_data['text'].values

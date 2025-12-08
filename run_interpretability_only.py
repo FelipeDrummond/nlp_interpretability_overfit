@@ -93,8 +93,19 @@ def load_baseline_model(model_file: Path, model_cfg: Dict[str, Any]) -> BagOfWor
     return model
 
 
-def load_test_data(processed_dir: Path, dataset_name: str) -> Tuple[List[str], np.ndarray]:
-    df = pd.read_csv(processed_dir / f"{dataset_name}_test.csv")
+def load_test_data(processed_dir: Path, dataset_name: str, split: str = "val") -> Tuple[List[str], np.ndarray]:
+    """
+    Load data for interpretability analysis.
+    
+    Args:
+        processed_dir: Directory containing processed data
+        dataset_name: Name of the dataset
+        split: Which split to load ('val' or 'test'). Default is 'val' for interpretability.
+    
+    Returns:
+        Tuple of (texts, labels)
+    """
+    df = pd.read_csv(processed_dir / f"{dataset_name}_{split}.csv")
     texts = df["text"].tolist()
     labels = df["label"].values
     # Subsample for efficiency (match pipeline defaults if large)
@@ -151,9 +162,9 @@ def run_interpretability_for(model_name: str, cfg: Any, logger: logging.Logger) 
                 model_cfg = OmegaConf.to_container(cfg.models.baseline_models["bag-of-words-tfidf"], resolve=True)
             model = load_baseline_model(model_file, model_cfg)
 
-        # Load test data
+        # Load validation data for interpretability analysis
         try:
-            texts, labels = load_test_data(processed_dir, dataset_name)
+            texts, labels = load_test_data(processed_dir, dataset_name, split="val")
         except FileNotFoundError as e:
             logger.error(str(e))
             continue
