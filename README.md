@@ -17,16 +17,16 @@ This project investigates the relationship between model overfitting and interpr
 
 ## 🖥️ Hardware Requirements
 
-- **MacBook Pro M4 Pro (Apple Silicon)**
-- **No CUDA support** - Uses MPS (Metal Performance Shaders) or CPU
+- **NVIDIA GPU with CUDA support** (recommended)
+- **Alternative**: Apple Silicon (MPS) or CPU
 - **Memory Management** - Implements gradient checkpointing and batch size optimization
 
 ## 🚀 Installation
 
 ### Prerequisites
 - Python 3.9+
-- macOS with Apple Silicon (M1/M2/M3/M4)
-- Xcode Command Line Tools
+- NVIDIA GPU with CUDA support (recommended) or CPU
+- CUDA Toolkit (for GPU support)
 
 ### Setup Instructions
 
@@ -52,12 +52,12 @@ This project investigates the relationship between model overfitting and interpr
    python -c "from src.utils.device_utils import get_device; print(f'Device: {get_device()}')"
    ```
 
-### Apple Silicon Specific Notes
+### GPU Configuration
 
-- PyTorch automatically detects and uses MPS (Metal Performance Shaders)
-- No CUDA installation required
-- Some operations may fall back to CPU for compatibility
-- Memory management is optimized for Apple Silicon architecture
+- PyTorch automatically detects and uses CUDA if available
+- Falls back to MPS on Apple Silicon or CPU if GPU unavailable
+- Mixed precision training enabled for faster GPU performance
+- Memory management optimized for GPU training
 
 ## 📁 Project Structure
 
@@ -208,16 +208,16 @@ pytest tests/test_interpretability.py
 
 ### Common Issues
 
-1. **MPS Errors**
+1. **CUDA Errors**
    ```python
    # Automatic fallback to CPU
    from src.utils.device_utils import get_device
-   device = get_device()  # Handles MPS errors automatically
+   device = get_device()  # Handles CUDA errors automatically
    ```
 
-2. **Memory Issues**
+2. **GPU Memory Issues**
    ```python
-   # Reduce batch size
+   # Reduce batch size or enable gradient checkpointing
    from src.utils.device_utils import get_optimal_batch_size
    optimal_batch_size = get_optimal_batch_size(model, input_shape)
    ```
@@ -238,7 +238,7 @@ pytest tests/test_interpretability.py
 ## 📚 Dependencies
 
 ### Core Libraries
-- **PyTorch** (≥2.0.0) - MPS support for Apple Silicon
+- **PyTorch** (≥2.0.0) - CUDA support for GPU training
 - **Transformers** (≥4.30.0) - HuggingFace models
 - **SHAP** (≥0.42.0) - Interpretability analysis
 - **Scikit-learn** (≥1.3.0) - Baseline models
@@ -289,4 +289,4 @@ This project contributes to the growing field of interpretable machine learning 
 
 ---
 
-**Note**: This project is specifically designed for Apple Silicon MacBooks. For other hardware configurations, modifications to the device management and memory optimization may be required.
+**Note**: This project supports NVIDIA GPUs with CUDA, Apple Silicon with MPS, and CPU. Device detection is automatic.

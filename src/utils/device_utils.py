@@ -1,8 +1,8 @@
 """
-Device management utilities for Apple Silicon MacBook Pro M4 Pro.
+Device management utilities for GPU/CPU training.
 
-This module handles device detection, MPS configuration, and fallback strategies
-for PyTorch operations on Apple Silicon hardware.
+This module handles device detection, CUDA/MPS configuration, and fallback strategies
+for PyTorch operations on various hardware platforms.
 """
 
 import torch
@@ -18,8 +18,9 @@ def get_device() -> torch.device:
     Get the best available device for PyTorch operations.
     
     Priority order:
-    1. MPS (Metal Performance Shaders) if available
-    2. CPU as fallback
+    1. CUDA (NVIDIA GPU) if available
+    2. MPS (Metal Performance Shaders) if available (Apple Silicon)
+    3. CPU as fallback
     
     Returns:
         torch.device: The selected device
@@ -27,13 +28,14 @@ def get_device() -> torch.device:
     Raises:
         RuntimeError: If no suitable device is available
     """
-    if torch.backends.mps.is_available():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        logger.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
+        logger.info(f"CUDA version: {torch.version.cuda}")
+        return device
+    elif torch.backends.mps.is_available():
         device = torch.device("mps")
         logger.info("Using MPS (Metal Performance Shaders) device")
-        return device
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-        logger.warning("CUDA detected but not recommended for Apple Silicon")
         return device
     else:
         device = torch.device("cpu")

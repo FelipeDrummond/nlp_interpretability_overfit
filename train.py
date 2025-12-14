@@ -300,7 +300,8 @@ def main(cfg: DictConfig) -> None:
         # Log initial memory status
         logger.info("Initial system memory status:")
         import torch
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        from src.utils.device_utils import get_device
+        device = get_device()
         log_memory_summary(device, "at startup")
         
         # Get model configuration

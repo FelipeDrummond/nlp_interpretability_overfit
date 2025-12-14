@@ -151,6 +151,39 @@ def process_dataset(dataset_name: str,
         train_data = dataset.apply_text_preprocessing(raw_data['train'])
         test_data = dataset.apply_text_preprocessing(raw_data['test'])
         
+        # Apply max_samples limit if specified
+        max_samples = global_config.get('max_samples', None)
+        if max_samples is not None and max_samples > 0:
+            # Combine train and test temporarily to sample
+            combined_data = pd.concat([train_data, test_data], ignore_index=True)
+            original_size = len(combined_data)
+            
+            if original_size > max_samples:
+                logger.info(f"Limiting dataset to {max_samples} samples (from {original_size})")
+                # Use stratified sampling to maintain class balance
+                if 'label' in combined_data.columns:
+                    combined_data, _ = train_test_split(
+                        combined_data,
+                        train_size=max_samples,
+                        random_state=global_config.get('seed', 42),
+                        stratify=combined_data['label']
+                    )
+                else:
+                    combined_data = combined_data.sample(
+                        n=max_samples,
+                        random_state=global_config.get('seed', 42)
+                    ).reset_index(drop=True)
+                
+                # Split back into train (80%) and test (20%) for now
+                # The create_splits will further divide these
+                train_data, test_data = train_test_split(
+                    combined_data,
+                    test_size=0.2,
+                    random_state=global_config.get('seed', 42),
+                    stratify=combined_data['label']
+                )
+                logger.info(f"After sampling: train={len(train_data)}, test={len(test_data)}")
+        
         # Create splits
         validation_split = global_config.validation_split
         test_split = global_config.get('test_split', 0.1)

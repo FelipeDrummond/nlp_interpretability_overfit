@@ -209,8 +209,16 @@ class BERTModel(BaseModel):
         else:
             self.scheduler = None
         
-        # Training loop
+        # Training loop with early stopping
         num_epochs = self.num_epochs
+        
+        # Early stopping parameters
+        early_stopping = self.config.get('early_stopping', False)
+        early_stopping_patience = self.config.get('early_stopping_patience', 3)
+        early_stopping_min_delta = self.config.get('early_stopping_min_delta', 0.001)
+        
+        best_val_loss = float('inf')
+        patience_counter = 0
         
         for epoch in range(num_epochs):
             # Training
@@ -235,6 +243,20 @@ class BERTModel(BaseModel):
                 if val_loss is not None:
                     log_msg += f", Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}"
                 logger.info(log_msg)
+            
+            # Early stopping check
+            if early_stopping and val_loss is not None:
+                if val_loss < best_val_loss - early_stopping_min_delta:
+                    best_val_loss = val_loss
+                    patience_counter = 0
+                    logger.info(f"Validation loss improved to {val_loss:.4f}")
+                else:
+                    patience_counter += 1
+                    logger.info(f"No improvement in validation loss. Patience: {patience_counter}/{early_stopping_patience}")
+                    
+                    if patience_counter >= early_stopping_patience:
+                        logger.info(f"Early stopping triggered at epoch {epoch+1}")
+                        break
         
         self.is_trained = True
         logger.info("BERT training completed!")

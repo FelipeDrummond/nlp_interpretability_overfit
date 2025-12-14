@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/venv"
-LOG_DIR="$SCRIPT_DIR/results/logs"
+LOG_DIR="/mnt/results/logs"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 MAIN_LOG="$LOG_DIR/interpretability_only_${TIMESTAMP}.log"
 
@@ -32,7 +32,7 @@ activate_venv() {
 
 check_data() {
     # Ensure processed data exists for all datasets declared in config
-    local data_dir="$SCRIPT_DIR/data/processed"
+    local data_dir="/mnt/data/processed"
     local files=("imdb_test.csv" "amazon_polarity_test.csv" "yelp_polarity_test.csv")
     local missing=0
     for f in "${files[@]}"; do

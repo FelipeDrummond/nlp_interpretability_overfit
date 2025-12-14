@@ -1,77 +1,56 @@
-# Unified Configuration File for NLP Interpretability Project
-# This file contains all configuration settings for the entire project
-
-# Global settings
 global:
   seed: 42
-  device: "mps"  # auto, mps, cpu, cuda
-  log_level: "INFO"
-  model: "bag-of-words-tfidf"  # Default model type
-
-# Paths
+  device: cuda
+  log_level: INFO
+  model: bag-of-words-tfidf
 paths:
-  results_dir: "results"
-  data_dir: "data"
-  models_dir: "results/models"
-  logs_dir: "results/logs"
-  figures_dir: "results/figures"
-  tables_dir: "results/tables"
-  artifacts_dir: "results/artifacts"
-  processed_data_dir: "data/processed"
-  cache_dir: "data/cache"
-
-# Reproducibility settings
+  results_dir: /mnt/results
+  data_dir: /mnt/data
+  models_dir: /mnt/results/models
+  logs_dir: /mnt/results/logs
+  figures_dir: /mnt/results/figures
+  tables_dir: /mnt/results/tables
+  artifacts_dir: /mnt/results/artifacts
+  processed_data_dir: /mnt/data/processed
+  cache_dir: /mnt/data/cache
 reproducibility:
   deterministic: true
   benchmark: false
   tokenizers_parallelism: false
-  cublas_workspace_config: ":4096:8"
-
-# Data configuration
+  cublas_workspace_config: :4096:8
 data:
-  # Global data settings
-  # Fraction of dataset to use (1.0 = use all data, 0.5 = use 50%, etc.)
-  data_fraction: 1.0  # Use 100% of data by default
-  # Split ratios: 0.1 = 10% validation, 0.1 = 10% test (80% train)
-  validation_split: 0.1  # 10% of combined data for validation
-  test_split: 0.1  # 10% of combined data for test (80% train)
-  combine_train_test: true  # Combine train+test then split 80/10/10
+  data_fraction: 1.0
+  max_samples: 50000
+  validation_split: 0.1
+  test_split: 0.1
+  combine_train_test: true
   force_reprocess: true
-  
-  # Text processing
-  text_column: "text"
-  label_column: "label"
+  text_column: text
+  label_column: label
   label_mapping:
-    0: "negative"
-    1: "positive"
-  
-  # Caching
+    0: negative
+    1: positive
   use_cache: true
-  
-  # Available datasets
   datasets:
     imdb:
-      name: "imdb"
-      source: "huggingface"
-      dataset_id: "imdb"
-      version: "1.0.0"
-      cache_dir: "${paths.cache_dir}/imdb"
+      name: imdb
+      source: huggingface
+      dataset_id: imdb
+      version: 1.0.0
+      cache_dir: /mnt/data/cache/imdb
     yelp_polarity:
-      name: "yelp_polarity"
-      source: "huggingface"
-      dataset_id: "yelp_polarity"
-      version: "1.0.0"
-      cache_dir: "${paths.cache_dir}/yelp_polarity"
+      name: yelp_polarity
+      source: huggingface
+      dataset_id: yelp_polarity
+      version: 1.0.0
+      cache_dir: /mnt/data/cache/yelp_polarity
     amazon_polarity:
-      name: "amazon_polarity"
-      source: "huggingface"
-      dataset_id: "amazon_polarity"
-      version: "1.0.0"
-      cache_dir: "${paths.cache_dir}/amazon_polarity"
-
-  # Data preprocessing pipeline
+      name: amazon_polarity
+      source: huggingface
+      dataset_id: amazon_polarity
+      version: 1.0.0
+      cache_dir: /mnt/data/cache/amazon_polarity
   preprocessing:
-    # Text cleaning
     text_cleaning:
       remove_html_tags: true
       remove_urls: true
@@ -79,85 +58,62 @@ data:
       remove_hashtags: false
       normalize_whitespace: true
       remove_extra_spaces: true
-      
-    # Text normalization
     text_normalization:
       lowercase: true
-      strip_accents: "unicode"
+      strip_accents: unicode
       remove_punctuation: false
       normalize_unicode: true
-      
-    # Tokenization (for transformer models)
     tokenization:
       max_length: 512
-      padding: "max_length"
+      padding: max_length
       truncation: true
-      return_tensors: "pt"
+      return_tensors: pt
       add_special_tokens: true
-      
-    # Vectorization (for baseline models)
     vectorization:
       max_features: 1000
-      ngram_range: [1, 2]
+      ngram_range:
+      - 1
+      - 2
       min_df: 2
       max_df: 0.95
-      stop_words: "english"
+      stop_words: english
       lowercase: true
-      strip_accents: "unicode"
-
-  # Data loading settings
+      strip_accents: unicode
   data_loading:
-    # Batch processing
     batch_size: 32
     shuffle: true
-    num_workers: 0  # Use main process for MPS compatibility
-    pin_memory: false  # Not needed for MPS
-    
-    # Memory management
+    num_workers: 4
+    pin_memory: true
     lazy_loading: true
     cache_processed_data: true
-    max_cache_size: "2GB"
-    
-    # Data augmentation (disabled for overfitting experiments)
+    max_cache_size: 2GB
     augmentation:
       enabled: false
       techniques: []
-      
-  # Data validation
   data_validation:
-    # Quality checks
     check_duplicates: true
     check_empty_texts: true
     check_label_distribution: true
     min_samples_per_class: 100
-    
-    # Statistics to compute
     compute_statistics:
-      - "text_length_distribution"
-      - "label_distribution"
-      - "vocabulary_size"
-      - "class_balance"
-
-# Model configuration
+    - text_length_distribution
+    - label_distribution
+    - vocabulary_size
+    - class_balance
 models:
-  # Global hyperparameters
   hyperparameters:
     learning_rate: 1e-3
     batch_size: 32
     num_epochs: 10
     weight_decay: 0.0
     dropout: 0.0
-
-  # Transformer models
   transformer_models:
-    # Google MultiBERTs - BERT-base models trained with different initialization seeds
-    # These models were trained with the same data and hyperparameters, only the seed changed
     multiberts-seed_0:
-      type: "transformer"
-      model_name: "google/multiberts-seed_0"
-      tokenizer_name: "google/multiberts-seed_0"
+      type: transformer
+      model_name: google/multiberts-seed_0
+      tokenizer_name: google/multiberts-seed_0
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -166,13 +122,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_1:
-      type: "transformer"
-      model_name: "google/multiberts-seed_1"
-      tokenizer_name: "google/multiberts-seed_1"
+      type: transformer
+      model_name: google/multiberts-seed_1
+      tokenizer_name: google/multiberts-seed_1
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -181,13 +139,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_2:
-      type: "transformer"
-      model_name: "google/multiberts-seed_2"
-      tokenizer_name: "google/multiberts-seed_2"
+      type: transformer
+      model_name: google/multiberts-seed_2
+      tokenizer_name: google/multiberts-seed_2
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -196,13 +156,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_3:
-      type: "transformer"
-      model_name: "google/multiberts-seed_3"
-      tokenizer_name: "google/multiberts-seed_3"
+      type: transformer
+      model_name: google/multiberts-seed_3
+      tokenizer_name: google/multiberts-seed_3
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -211,13 +173,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_4:
-      type: "transformer"
-      model_name: "google/multiberts-seed_4"
-      tokenizer_name: "google/multiberts-seed_4"
+      type: transformer
+      model_name: google/multiberts-seed_4
+      tokenizer_name: google/multiberts-seed_4
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -226,13 +190,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_5:
-      type: "transformer"
-      model_name: "google/multiberts-seed_5"
-      tokenizer_name: "google/multiberts-seed_5"
+      type: transformer
+      model_name: google/multiberts-seed_5
+      tokenizer_name: google/multiberts-seed_5
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -241,13 +207,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_6:
-      type: "transformer"
-      model_name: "google/multiberts-seed_6"
-      tokenizer_name: "google/multiberts-seed_6"
+      type: transformer
+      model_name: google/multiberts-seed_6
+      tokenizer_name: google/multiberts-seed_6
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -256,13 +224,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_7:
-      type: "transformer"
-      model_name: "google/multiberts-seed_7"
-      tokenizer_name: "google/multiberts-seed_7"
+      type: transformer
+      model_name: google/multiberts-seed_7
+      tokenizer_name: google/multiberts-seed_7
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -271,13 +241,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_8:
-      type: "transformer"
-      model_name: "google/multiberts-seed_8"
-      tokenizer_name: "google/multiberts-seed_8"
+      type: transformer
+      model_name: google/multiberts-seed_8
+      tokenizer_name: google/multiberts-seed_8
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -286,13 +258,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_9:
-      type: "transformer"
-      model_name: "google/multiberts-seed_9"
-      tokenizer_name: "google/multiberts-seed_9"
+      type: transformer
+      model_name: google/multiberts-seed_9
+      tokenizer_name: google/multiberts-seed_9
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -301,13 +275,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_10:
-      type: "transformer"
-      model_name: "google/multiberts-seed_10"
-      tokenizer_name: "google/multiberts-seed_10"
+      type: transformer
+      model_name: google/multiberts-seed_10
+      tokenizer_name: google/multiberts-seed_10
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -316,13 +292,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_11:
-      type: "transformer"
-      model_name: "google/multiberts-seed_11"
-      tokenizer_name: "google/multiberts-seed_11"
+      type: transformer
+      model_name: google/multiberts-seed_11
+      tokenizer_name: google/multiberts-seed_11
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -331,13 +309,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_12:
-      type: "transformer"
-      model_name: "google/multiberts-seed_12"
-      tokenizer_name: "google/multiberts-seed_12"
+      type: transformer
+      model_name: google/multiberts-seed_12
+      tokenizer_name: google/multiberts-seed_12
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -346,13 +326,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_13:
-      type: "transformer"
-      model_name: "google/multiberts-seed_13"
-      tokenizer_name: "google/multiberts-seed_13"
+      type: transformer
+      model_name: google/multiberts-seed_13
+      tokenizer_name: google/multiberts-seed_13
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -361,13 +343,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_14:
-      type: "transformer"
-      model_name: "google/multiberts-seed_14"
-      tokenizer_name: "google/multiberts-seed_14"
+      type: transformer
+      model_name: google/multiberts-seed_14
+      tokenizer_name: google/multiberts-seed_14
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -376,13 +360,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_15:
-      type: "transformer"
-      model_name: "google/multiberts-seed_15"
-      tokenizer_name: "google/multiberts-seed_15"
+      type: transformer
+      model_name: google/multiberts-seed_15
+      tokenizer_name: google/multiberts-seed_15
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -391,13 +377,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_16:
-      type: "transformer"
-      model_name: "google/multiberts-seed_16"
-      tokenizer_name: "google/multiberts-seed_16"
+      type: transformer
+      model_name: google/multiberts-seed_16
+      tokenizer_name: google/multiberts-seed_16
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -406,13 +394,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_17:
-      type: "transformer"
-      model_name: "google/multiberts-seed_17"
-      tokenizer_name: "google/multiberts-seed_17"
+      type: transformer
+      model_name: google/multiberts-seed_17
+      tokenizer_name: google/multiberts-seed_17
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -421,13 +411,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_18:
-      type: "transformer"
-      model_name: "google/multiberts-seed_18"
-      tokenizer_name: "google/multiberts-seed_18"
+      type: transformer
+      model_name: google/multiberts-seed_18
+      tokenizer_name: google/multiberts-seed_18
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -436,13 +428,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_19:
-      type: "transformer"
-      model_name: "google/multiberts-seed_19"
-      tokenizer_name: "google/multiberts-seed_19"
+      type: transformer
+      model_name: google/multiberts-seed_19
+      tokenizer_name: google/multiberts-seed_19
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -451,13 +445,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_20:
-      type: "transformer"
-      model_name: "google/multiberts-seed_20"
-      tokenizer_name: "google/multiberts-seed_20"
+      type: transformer
+      model_name: google/multiberts-seed_20
+      tokenizer_name: google/multiberts-seed_20
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -466,13 +462,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_21:
-      type: "transformer"
-      model_name: "google/multiberts-seed_21"
-      tokenizer_name: "google/multiberts-seed_21"
+      type: transformer
+      model_name: google/multiberts-seed_21
+      tokenizer_name: google/multiberts-seed_21
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -481,13 +479,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_22:
-      type: "transformer"
-      model_name: "google/multiberts-seed_22"
-      tokenizer_name: "google/multiberts-seed_22"
+      type: transformer
+      model_name: google/multiberts-seed_22
+      tokenizer_name: google/multiberts-seed_22
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -496,13 +496,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_23:
-      type: "transformer"
-      model_name: "google/multiberts-seed_23"
-      tokenizer_name: "google/multiberts-seed_23"
+      type: transformer
+      model_name: google/multiberts-seed_23
+      tokenizer_name: google/multiberts-seed_23
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -511,13 +513,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     multiberts-seed_24:
-      type: "transformer"
-      model_name: "google/multiberts-seed_24"
-      tokenizer_name: "google/multiberts-seed_24"
+      type: transformer
+      model_name: google/multiberts-seed_24
+      tokenizer_name: google/multiberts-seed_24
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -526,14 +530,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
-    # Other Transformer Architectures
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     roberta-base:
-      type: "transformer"
-      model_name: "roberta-base"
-      tokenizer_name: "roberta-base"
+      type: transformer
+      model_name: roberta-base
+      tokenizer_name: roberta-base
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -542,13 +547,15 @@ models:
       adam_epsilon: 1e-8
       max_grad_norm: 1.0
       warmup_steps: 0
-
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
     distilbert-base-uncased:
-      type: "transformer"
-      model_name: "distilbert-base-uncased"
-      tokenizer_name: "distilbert-base-uncased"
+      type: transformer
+      model_name: distilbert-base-uncased
+      tokenizer_name: distilbert-base-uncased
       num_labels: 2
-      max_length: 256
+      max_length: 512
       batch_size: 16
       learning_rate: 2e-5
       weight_decay: 1e-2
@@ -558,220 +565,178 @@ models:
       max_grad_norm: 1.0
       warmup_steps: 0
       use_token_type_ids: false
-
-  # Baseline models
+      early_stopping: true
+      early_stopping_patience: 3
+      early_stopping_min_delta: 0.001
   baseline_models:
     bag-of-words-tfidf:
-      type: "baseline"
-      vectorizer: "tfidf"
-      classifier: "logistic_regression"
+      type: baseline
+      vectorizer: tfidf
+      classifier: logistic_regression
       num_labels: 2
-      
       max_features: 1000
-      ngram_range: [1, 2]
+      ngram_range:
+      - 1
+      - 2
       min_df: 2
       max_df: 0.95
-      stop_words: "english"
+      stop_words: english
       lowercase: true
-      strip_accents: "unicode"
-      
+      strip_accents: unicode
       C: 1.0
-      penalty: "l2"
-      solver: "liblinear"
+      penalty: l2
+      solver: liblinear
       max_iter: 1000
-
   model_selection:
     selected_models:
-      # MultiBERTs models - comparing different initialization seeds
-      - "multiberts-seed_0"
-      - "multiberts-seed_1"
-      - "multiberts-seed_2"
-      - "multiberts-seed_3"
-      - "multiberts-seed_4"
-      - "multiberts-seed_5"
-      - "multiberts-seed_6"
-      - "multiberts-seed_7"
-      - "multiberts-seed_8"
-      - "multiberts-seed_9"
-      - "multiberts-seed_10"
-      - "multiberts-seed_11"
-      - "multiberts-seed_12"
-      - "multiberts-seed_13"
-      - "multiberts-seed_14"
-      - "multiberts-seed_15"
-      - "multiberts-seed_16"
-      - "multiberts-seed_17"
-      - "multiberts-seed_18"
-      - "multiberts-seed_19"
-      - "multiberts-seed_20"
-      - "multiberts-seed_21"
-      - "multiberts-seed_22"
-      - "multiberts-seed_23"
-      - "multiberts-seed_24"
-      # Baseline for comparison
-      - "bag-of-words-tfidf"
-
+    - multiberts-seed_0
+    - multiberts-seed_1
+    - multiberts-seed_2
+    - multiberts-seed_3
+    - multiberts-seed_4
+    - multiberts-seed_5
+    - multiberts-seed_6
+    - multiberts-seed_7
+    - multiberts-seed_8
+    - multiberts-seed_9
+    - multiberts-seed_10
+    - multiberts-seed_11
+    - multiberts-seed_12
+    - multiberts-seed_13
+    - multiberts-seed_14
+    - multiberts-seed_15
+    - multiberts-seed_16
+    - multiberts-seed_17
+    - multiberts-seed_18
+    - multiberts-seed_19
+    - multiberts-seed_20
+    - multiberts-seed_21
+    - multiberts-seed_22
+    - multiberts-seed_23
+    - multiberts-seed_24
+    - bag-of-words-tfidf
     categories:
       transformer:
-        - "multiberts-seed_0"
-        - "multiberts-seed_1"
-        - "multiberts-seed_2"
-        - "multiberts-seed_3"
-        - "multiberts-seed_4"
-        - "multiberts-seed_5"
-        - "multiberts-seed_6"
-        - "multiberts-seed_7"
-        - "multiberts-seed_8"
-        - "multiberts-seed_9"
-        - "multiberts-seed_10"
-        - "multiberts-seed_11"
-        - "multiberts-seed_12"
-        - "multiberts-seed_13"
-        - "multiberts-seed_14"
-        - "multiberts-seed_15"
-        - "multiberts-seed_16"
-        - "multiberts-seed_17"
-        - "multiberts-seed_18"
-        - "multiberts-seed_19"
-        - "multiberts-seed_20"
-        - "multiberts-seed_21"
-        - "multiberts-seed_22"
-        - "multiberts-seed_23"
-        - "multiberts-seed_24"
+      - multiberts-seed_0
+      - multiberts-seed_1
+      - multiberts-seed_2
+      - multiberts-seed_3
+      - multiberts-seed_4
+      - multiberts-seed_5
+      - multiberts-seed_6
+      - multiberts-seed_7
+      - multiberts-seed_8
+      - multiberts-seed_9
+      - multiberts-seed_10
+      - multiberts-seed_11
+      - multiberts-seed_12
+      - multiberts-seed_13
+      - multiberts-seed_14
+      - multiberts-seed_15
+      - multiberts-seed_16
+      - multiberts-seed_17
+      - multiberts-seed_18
+      - multiberts-seed_19
+      - multiberts-seed_20
+      - multiberts-seed_21
+      - multiberts-seed_22
+      - multiberts-seed_23
+      - multiberts-seed_24
       baseline:
-        - "bag-of-words-tfidf"
-
-  # Memory optimization for M4 Pro
+      - bag-of-words-tfidf
   memory:
     gradient_checkpointing: true
-    mixed_precision: false
+    mixed_precision: true
     max_memory_usage: 0.8
-
-# Training configuration
 training:
-  # Overfitting parameters
   learning_rate: 1e-3
   num_epochs: 10
   weight_decay: 0.0
   dropout: 0.0
-  early_stopping: false
-  
-  # Optimizer (use defaults)
-  optimizer: "AdamW"
-  
-  # Gradient settings
+  early_stopping: true
+  early_stopping_patience: 3
+  early_stopping_min_delta: 0.001
+  optimizer: AdamW
   max_grad_norm: 1.0
   gradient_accumulation_steps: 1
-
-# Interpretability analysis
 interpretability:
-  # SHAP settings
   shap:
     max_samples: 100
     background_samples: 50
-    explainer_type: "auto"  # auto, tree, deep, gradient
-    device: "cpu"  # Always use CPU for SHAP
-    
-  # Metrics to compute
+    explainer_type: auto
+    device: cpu
   metrics:
     faithfulness:
       enabled: true
-      method: "removal"
+      method: removal
       num_samples: 50
-      
     consistency:
       enabled: true
       similarity_threshold: 0.7
       num_pairs: 100
-      
     sparsity:
       enabled: true
       threshold: 0.01
-      
     intuitiveness:
-      enabled: false  # Requires human annotations
+      enabled: false
       annotation_file: null
-      
-  # Visualization settings
   visualization:
     max_features_display: 20
     figure_dpi: 300
-    figure_format: "png"
-    color_scheme: "viridis"
+    figure_format: png
+    color_scheme: viridis
     save_plots: true
-
-# Evaluation settings
 evaluation:
-  # Performance metrics
   performance_metrics:
-    - "accuracy"
-    - "precision"
-    - "recall"
-    - "f1"
-    - "auc_roc"
-    - "auc_pr"
-    - "confusion_matrix"
-    
-  # Cross-dataset evaluation
+  - accuracy
+  - precision
+  - recall
+  - f1
+  - auc_roc
+  - auc_pr
+  - confusion_matrix
   cross_dataset:
     enabled: true
-    strategy: "leave_one_dataset_out"
+    strategy: leave_one_dataset_out
     compute_interpretability_consistency: true
-    
-  # Statistical testing
   statistical_tests:
     enabled: true
     significance_level: 0.05
-    multiple_comparison_correction: "bonferroni"
+    multiple_comparison_correction: bonferroni
     effect_size: true
-    
-  # Model comparison
   model_comparison:
     enabled: true
-    baseline_model: "bag-of-words-tfidf"
+    baseline_model: bag-of-words-tfidf
     comparison_metrics:
-      - "accuracy"
-      - "f1"
-      - "faithfulness"
-      - "consistency"
-
-# Experiment tracking
+    - accuracy
+    - f1
+    - faithfulness
+    - consistency
 experiment_tracking:
   enabled: true
-  backend: "local"  # local, mlflow, wandb
-  
-  # Experiment naming
-  experiment_name: "nlp_interpretability_overfit"
-  run_name_template: "{model}_{dataset}_{timestamp}"
-  
-  # Logging settings
+  backend: local
+  experiment_name: nlp_interpretability_overfit
+  run_name_template: '{model}_{dataset}_{timestamp}'
   log_artifacts: true
   log_models: true
   log_metrics: true
   log_parameters: true
-
-# Resource management
 resources:
   max_memory_usage: 0.8
-  num_workers: 0  # MPS compatibility
-  max_training_time: 3600  # 1 hour per model
-  max_evaluation_time: 1800  # 30 minutes per evaluation
-
-# Logging settings
+  num_workers: 4
+  max_training_time: 3600
+  max_evaluation_time: 1800
 logging:
-  console_level: "INFO"
-  file_level: "DEBUG"
+  console_level: INFO
+  file_level: DEBUG
   log_experiments: true
   log_model_info: true
   log_dataset_info: true
   log_training_progress: true
   log_interpretability_results: true
-
-# Output settings
 output:
-  # File naming conventions
   file_naming:
-    model_checkpoint: "{model}_{dataset}_{epoch:03d}.pt"
-    experiment_log: "{experiment}_{timestamp}.json"
-    figure: "{model}_{dataset}_{metric}_{timestamp}.png"
-    table: "{experiment}_{metric}_{timestamp}.csv"
+    model_checkpoint: '{model}_{dataset}_{epoch:03d}.pt'
+    experiment_log: '{experiment}_{timestamp}.json'
+    figure: '{model}_{dataset}_{metric}_{timestamp}.png'
+    table: '{experiment}_{metric}_{timestamp}.csv'
